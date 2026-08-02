@@ -1,0 +1,84 @@
+# 应用 + 中间件一体化（可选）
+# 先确保中间件已起，或与本文件一起启动
+version: "3.9"
+
+services:
+  group-buy-market:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    container_name: gbm-app
+    restart: always
+    ports:
+      - "8091:8091"
+    environment:
+      TZ: Asia/Shanghai
+      GBM_CONFIG: /app/configs/config-docker.yaml
+    volumes:
+      - ../../configs/config-docker.yaml:/app/configs/config-docker.yaml:ro
+    depends_on:
+      - mysql
+      - redis
+      - rabbitmq
+    networks:
+      - gbm-network
+    command: ["/app/server", "-config", "/app/configs/config-docker.yaml"]
+
+  mysql:
+    image: mysql:8.0.32
+    container_name: gbm-mysql
+    command: --default-authentication-plugin=mysql_native_password
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: "123456"
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/mysql.cnf:ro
+      - ./mysql/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
+      interval: 5s
+      timeout: 10s
+      retries: 15
+    networks:
+      - gbm-network
+
+  redis:
+    image: redis:6.2
+    container_name: gbm-redis
+    ports:
+      - "16379:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gbm-network
+
+  rabbitmq:
+    image: rabbitmq:3.12.9-management
+    container_name: gbm-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - gbm-network
+
+networks:
+  gbm-network:
+    driver: bridge

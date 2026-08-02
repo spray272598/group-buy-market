@@ -1,0 +1,42 @@
+server:
+  port: 8091
+  mode: release
+
+mysql:
+  dsn: "root:123456@tcp(mysql:3306)/group_buy_market?charset=utf8mb4&parseTime=True&loc=Local"
+  max_idle: 10
+  max_open: 25
+
+redis:
+  addr: "redis:6379"
+  password: ""
+  db: 0
+
+rabbitmq:
+  url: "amqp://admin:admin@rabbitmq:5672/"
+  exchange: "group_buy_market_exchange"
+  topic_team_success:
+    routing_key: "topic.team_success"
+    queue: "group_buy_market_queue_2_topic_team_success"
+  topic_team_refund:
+    routing_key: "topic.team_refund"
+    queue: "group_buy_market_queue_2_topic_team_refund"
+
+dcc:
+  downgrade_switch: "0"
+  cut_range: "100"
+  sc_blacklist: "s02c02"
+  cache_switch: "0"
+
+notify:
+  topic_team_success: "topic.team_success"
+  topic_team_refund: "topic.team_refund"
+  http_timeout_sec: 5
+
+job:
+  notify_interval_sec: 30
+  timeout_refund_interval_sec: 60
+
+rate_limit:
+  index_qps: 10
+  burst: 5

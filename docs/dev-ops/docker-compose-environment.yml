@@ -1,0 +1,119 @@
+# 本地中间件一键启动（对齐 Java docs/dev-ops）
+# 使用：在 docs/dev-ops 目录执行
+#   docker compose -f docker-compose-environment.yml up -d
+version: "3.9"
+
+services:
+  mysql:
+    image: mysql:8.0.32
+    container_name: gbm-mysql
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: "123456"
+    ports:
+      - "13306:3306"
+    volumes:
+      - ./mysql/my.cnf:/etc/mysql/conf.d/mysql.cnf:ro
+      - ./mysql/sql:/docker-entrypoint-initdb.d
+      - gbm-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p123456"]
+      interval: 5s
+      timeout: 10s
+      retries: 15
+      start_period: 20s
+    networks:
+      - gbm-network
+
+  phpmyadmin:
+    image: phpmyadmin:5.2.1
+    container_name: gbm-phpmyadmin
+    ports:
+      - "8899:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: "123456"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - gbm-network
+
+  redis:
+    image: redis:6.2
+    container_name: gbm-redis
+    restart: always
+    ports:
+      - "16379:6379"
+    volumes:
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - gbm-redis-data:/data
+    command: redis-server /usr/local/etc/redis/redis.conf
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - gbm-network
+
+  redis-admin:
+    image: spryker/redis-commander:0.8.0
+    container_name: gbm-redis-admin
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+      HTTP_USER: admin
+      HTTP_PASSWORD: admin
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - gbm-network
+
+  rabbitmq:
+    image: rabbitmq:3.12.9-management
+    container_name: gbm-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin
+    volumes:
+      - ./rabbitmq/enabled_plugins:/etc/rabbitmq/enabled_plugins:ro
+      - gbm-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+    networks:
+      - gbm-network
+
+  # 可选：Prometheus 抓取应用 /metrics
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: gbm-prometheus
+    restart: always
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - gbm-network
+
+networks:
+  gbm-network:
+    driver: bridge
+
+volumes:
+  gbm-mysql-data:
+  gbm-redis-data:
+  gbm-rabbitmq-data:
