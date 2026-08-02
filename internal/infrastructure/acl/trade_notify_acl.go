@@ -1,4 +1,4 @@
-package notify
+package acl
 
 import (
 	"context"
@@ -14,24 +14,34 @@ import (
 	"group-buy-market/internal/types/enums"
 )
 
-// TradePort 实现 ITradePort：多实例抢锁 + HTTP/MQ 回调
+// TradeNotifyACL 出站防腐层实现（Anti-Corruption Layer）
+//
+// 将领域 NotifyTask 翻译为：
+//   - HTTP JSON 回调（下游商城协议）
+//   - RabbitMQ 持久化消息
+// 并处理多实例分布式锁，隔离领域与中间件细节。
 // 对齐 Java infrastructure.adapter.port.TradePort
-type TradePort struct {
+type TradeNotifyACL struct {
 	redis   *redisx.Service
 	httpGW  *gateway.GroupBuyNotifyService
 	publish *mq.EventPublisher
 }
 
-func NewTradePort(rdb *redisx.Service, httpGW *gateway.GroupBuyNotifyService, pub *mq.EventPublisher) port.ITradePort {
-	return &TradePort{redis: rdb, httpGW: httpGW, publish: pub}
+// NewTradeNotifyACL 创建出站防腐实现，对外仍表现为 ITradePort
+func NewTradeNotifyACL(rdb *redisx.Service, httpGW *gateway.GroupBuyNotifyService, pub *mq.EventPublisher) port.ITradePort {
+	return &TradeNotifyACL{redis: rdb, httpGW: httpGW, publish: pub}
 }
 
-func (p *TradePort) GroupBuyNotify(ctx context.Context, task *entity.NotifyTaskEntity) (string, error) {
+// 兼容旧名称
+func NewTradePort(rdb *redisx.Service, httpGW *gateway.GroupBuyNotifyService, pub *mq.EventPublisher) port.ITradePort {
+	return NewTradeNotifyACL(rdb, httpGW, pub)
+}
+
+func (p *TradeNotifyACL) GroupBuyNotify(ctx context.Context, task *entity.NotifyTaskEntity) (string, error) {
 	if task == nil {
 		return enums.NotifyTaskHTTPSuccess, nil
 	}
 	lockKey := task.LockKey()
-	// 多实例部署：同一回调任务只允许一个实例执行
 	ok, err := p.redis.TryLockWait(ctx, lockKey, 3*time.Second, 30*time.Second)
 	if err != nil {
 		slog.Error("回调任务抢锁异常", "lockKey", lockKey, "err", err)
@@ -48,12 +58,14 @@ func (p *TradePort) GroupBuyNotify(ctx context.Context, task *entity.NotifyTaskE
 		if task.NotifyUrl == "" || task.NotifyUrl == "暂无" {
 			return enums.NotifyTaskHTTPSuccess, nil
 		}
+		// ACL：领域参数 → HTTP 网关协议
 		return p.httpGW.GroupBuyNotify(ctx, task.NotifyUrl, task.ParameterJSON)
 	case valobj.NotifyMQ:
 		routingKey := task.NotifyMQ
 		if routingKey == "" {
 			routingKey = "topic.team_success"
 		}
+		// ACL：领域参数 → MQ routingKey + body
 		if err := p.publish.Publish(ctx, routingKey, task.ParameterJSON); err != nil {
 			return enums.NotifyTaskHTTPError, err
 		}

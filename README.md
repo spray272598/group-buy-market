@@ -38,24 +38,35 @@ group-buy-market/
 ├── scripts/sql/
 ├── Dockerfile
 └── internal/
-    ├── types/                  # 枚举、异常、统一响应
-    ├── design/chain|tree       # 责任链 / 策略树框架
-    ├── domain/                 # ★ 领域（无 gin/gorm/redis 依赖）
-    │   ├── activity/           # 试算、折扣
-    │   ├── trade/              # 锁单、结算、退单、任务
-    │   └── tag/                # 人群标签批次
-    ├── infrastructure/         # 仓储、Redis、MQ、HTTP 网关、DCC
-    ├── trigger/                # HTTP / Job / MQ Listener
-    └── app/                    # Composition Root 组装
+    ├── api/                    # 对外契约 DTO/接口
+    ├── application/            # 用例编排 + 入站防腐 assembler
+    ├── design/                 # 责任链/策略树骨架（无业务）
+    ├── domain/                 # 领域 + 出站 port
+    ├── infrastructure/         # repository + **acl 出站防腐** + 中间件
+    ├── trigger/                # 瘦 HTTP/Job/Listener
+    └── app/                    # 组装根
 ```
 
-**依赖方向（不可逆）：**
+**依赖方向：**
 
 ```
-trigger ──► domain ◄── infrastructure
-              ▲
-             app（只组装）
+trigger → application(实现 api) → domain → design
+                                    ▲
+                         infrastructure（含出站 ACL）
 ```
+
+| 层 | 一句话 |
+|----|--------|
+| **api** | 对外合同 |
+| **application** | 用例 + **入站防腐** |
+| **domain** | 业务规则 + 出站端口定义 |
+| **infrastructure/acl** | **出站防腐**（HTTP/MQ） |
+| **design** | 模式骨架 |
+| **trigger** | 协议适配（越瘦越好） |
+
+防腐层详解：[docs/acl.md](docs/acl.md)
+
+> 合规审计：[docs/ddd-compliance-audit.md](docs/ddd-compliance-audit.md) · design 说明：[docs/design-layer.md](docs/design-layer.md)
 
 ---
 
@@ -84,7 +95,15 @@ go mod tidy
 go run ./cmd/server -config configs/config.yaml
 ```
 
-### 3）冒烟
+### 3）测试台 / Swagger / 观测
+
+| 入口 | 地址 |
+|------|------|
+| **API 测试页面** | http://127.0.0.1:8091/test/ |
+| **Swagger UI** | http://127.0.0.1:8091/swagger/ |
+| Grafana + ELK | `docker compose -f docker-compose-environment.yml -f docker-compose-observability.yml up -d` |
+
+### 4）冒烟
 
 ```bash
 # 健康检查
@@ -118,7 +137,7 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 | 业务 | 技术点 |
 |------|--------|
 | 营销试算 | 策略树 Root→Switch→Market→Tag→End；折扣 ZJ/MJ/N/ZK |
-| 降级/切量/黑名单 | DCC 内存配置，HTTP 热更新 |
+| 降级/切量/黑名单 | DCC + **Redis Pub/Sub 跨实例广播** |
 | 锁单 | 责任链 + Redis 库存 + MySQL 事务写团/明细 |
 | 结算成团 | 责任链 + complete_count + 达标写 notify_task |
 | 回调 | TradePort：Redis 抢锁 → HTTP 或 MQ 持久化消息 |
@@ -132,6 +151,7 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 
 | Java | Go |
 |------|-----|
+| **group-buy-market-api** | **internal/api** |
 | group-buy-market-domain | internal/domain |
 | group-buy-market-infrastructure | internal/infrastructure |
 | group-buy-market-trigger | internal/trigger |
@@ -144,9 +164,13 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 
 ## 文档索引
 
-- [docs/ddd.md](docs/ddd.md) — DDD
-- [docs/design-patterns.md](docs/design-patterns.md) — 模式
-- [docs/api.md](docs/api.md) — API
+- [docs/ddd.md](docs/ddd.md) — DDD 与分层依赖
+- [docs/acl.md](docs/acl.md) — **防腐层（有/在哪/怎么讲）**
+- [docs/ddd-compliance-audit.md](docs/ddd-compliance-audit.md) — DDD 合规审计
+- [docs/design-layer.md](docs/design-layer.md) — 为何有 design 层
+- [docs/architecture-layers.md](docs/architecture-layers.md) — 为何需要 api 层
+- [docs/design-patterns.md](docs/design-patterns.md) — 业务中的模式用法
+- [docs/api.md](docs/api.md) — HTTP API + 契约接口
 - [docs/middleware.md](docs/middleware.md) — Docker / 中间件
 - [docs/quickstart.md](docs/quickstart.md) — 快速上手
 - [docs/interview.md](docs/interview.md) — 秋招面试讲解提纲
@@ -154,8 +178,11 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 ## 测试
 
 ```bash
-go test ./internal/domain/... ./internal/design/...
+# 领域 + 设计模式 + DCC 跨实例 mock + 限流
+go test ./internal/... -count=1
 ```
+
+覆盖：折扣策略、试算责任链、锁单/结算规则链、退单类型、DCC 广播、限流等。
 
 ## License
 

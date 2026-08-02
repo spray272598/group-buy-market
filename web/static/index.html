@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>拼团营销 API 测试台 · group-buy-market</title>
+  <style>
+    :root { --bg:#0f1419; --card:#1a2332; --border:#2d3a4f; --text:#e7ecf3; --muted:#8b9bb4; --accent:#3b82f6; --ok:#22c55e; --err:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: ui-sans-serif, system-ui, "Segoe UI", sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:20px 24px; border-bottom:1px solid var(--border); display:flex; gap:16px; flex-wrap:wrap; align-items:center; }
+    header h1 { margin:0; font-size:1.25rem; }
+    header a { color:var(--accent); text-decoration:none; margin-right:12px; }
+    .wrap { display:grid; grid-template-columns: 320px 1fr; gap:16px; padding:16px; min-height: calc(100vh - 72px); }
+    @media (max-width:900px){ .wrap{ grid-template-columns:1fr; } }
+    .panel { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .nav button { display:block; width:100%; text-align:left; margin:0 0 8px; padding:10px 12px; border-radius:8px; border:1px solid var(--border); background:#121a26; color:var(--text); cursor:pointer; }
+    .nav button.active, .nav button:hover { border-color:var(--accent); background:#152238; }
+    label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+    input, select, textarea { width:100%; padding:8px 10px; border-radius:8px; border:1px solid var(--border); background:#0d121a; color:var(--text); }
+    textarea { min-height:120px; font-family: ui-monospace, monospace; font-size:12px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    button.primary { background:var(--accent); color:#fff; border:none; padding:10px 16px; border-radius:8px; cursor:pointer; font-weight:600; }
+    button.ghost { background:transparent; border:1px solid var(--border); color:var(--text); padding:10px 16px; border-radius:8px; cursor:pointer; }
+    pre { background:#0d121a; border:1px solid var(--border); border-radius:8px; padding:12px; overflow:auto; max-height:420px; font-size:12px; white-space:pre-wrap; word-break:break-all; }
+    .status { font-size:13px; color:var(--muted); }
+    .status.ok { color:var(--ok); }
+    .status.err { color:var(--err); }
+    h2 { margin:0 0 8px; font-size:1.05rem; }
+    .hint { color:var(--muted); font-size:12px; margin-bottom:12px; line-height:1.5; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>拼团营销 API 测试台</h1>
+  <div>
+    <a href="/swagger/" target="_blank">Swagger UI</a>
+    <a href="/health" target="_blank">Health</a>
+    <a href="/metrics" target="_blank">Metrics</a>
+  </div>
+  <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+    <label style="margin:0;">Base URL</label>
+    <input id="baseUrl" style="width:220px;" value="" />
+  </div>
+</header>
+<div class="wrap">
+  <aside class="panel nav" id="nav"></aside>
+  <main class="panel">
+    <h2 id="title">接口</h2>
+    <p class="hint" id="hint"></p>
+    <div id="form"></div>
+    <div class="row">
+      <button class="primary" id="send">发送请求</button>
+      <button class="ghost" id="fill">填充示例</button>
+    </div>
+    <p class="status" id="status">就绪</p>
+    <label>响应</label>
+    <pre id="resp">{}</pre>
+  </main>
+</div>
+<script>
+const apis = [
+  {
+    id: 'index', name: '营销试算配置', method: 'POST', path: '/api/v1/gbm/index/query_group_buy_market_config',
+    hint: 'Root→Switch→Market→Tag 试算 + 在拼团列表 + 统计。按 userId 限流。',
+    example: { userId:'xfg01', source:'s01', channel:'c01', goodsId:'9890001' }
+  },
+  {
+    id: 'lock', name: '锁单（开团/参团）', method: 'POST', path: '/api/v1/gbm/trade/lock_market_pay_order',
+    hint: 'teamId 空=开新团；有值=参团。notifyType 可选 HTTP/MQ。',
+    example: { userId:'xfg01', teamId:'', activityId:100123, goodsId:'9890001', source:'s01', channel:'c01', outTradeNo: String(Date.now()).slice(-12), notifyConfigVO:{ notifyType:'MQ' } }
+  },
+  {
+    id: 'settle', name: '支付结算', method: 'POST', path: '/api/v1/gbm/trade/settlement_market_pay_order',
+    hint: '支付成功回调拼团结算；达标写 notify_task 并 MQ/HTTP 回调。',
+    example: { userId:'xfg01', source:'s01', channel:'c01', outTradeNo:'', outTradeTime: new Date().toISOString() }
+  },
+  {
+    id: 'refund', name: '退单', method: 'POST', path: '/api/v1/gbm/trade/refund_market_pay_order',
+    hint: '按组队状态×订单状态选择 unpaid/paid/paidTeam 策略。',
+    example: { userId:'xfg01', outTradeNo:'', source:'s01', channel:'c01' }
+  },
+  {
+    id: 'dccq', name: 'DCC 查询', method: 'GET', path: '/api/v1/gbm/dcc/query',
+    hint: '查看本实例动态配置快照。', example: null
+  },
+  {
+    id: 'dccu', name: 'DCC 更新（跨实例广播）', method: 'GET', path: '/api/v1/gbm/dcc/update_config',
+    hint: 'key=downgradeSwitch|cutRange|scBlacklist|cacheSwitch。通过 Redis Pub/Sub 通知其他实例。',
+    query: true,
+    example: { key:'downgradeSwitch', value:'0' }
+  },
+  {
+    id: 'tag', name: '人群打标批次', method: 'GET', path: '/api/v1/gbm/tag/exec_tag_batch_job',
+    hint: '写入 crowd_tags_detail + Redis BitSet。',
+    query: true,
+    example: { tagId:'RQ_KJHKL98UU78H66554GFDV', batchId:'10001' }
+  },
+  {
+    id: 'notify', name: '测试 HTTP 回调接收', method: 'POST', path: '/api/v1/test/group_buy_notify',
+    hint: '模拟下游接收成团回调。',
+    example: { teamId:'demo', outTradeNoList:['1','2'] }
+  }
+];
+
+let current = apis[0];
+const nav = document.getElementById('nav');
+const form = document.getElementById('form');
+const title = document.getElementById('title');
+const hint = document.getElementById('hint');
+const resp = document.getElementById('resp');
+const statusEl = document.getElementById('status');
+const baseUrl = document.getElementById('baseUrl');
+baseUrl.value = location.origin;
+
+apis.forEach((a,i) => {
+  const b = document.createElement('button');
+  b.textContent = a.name;
+  b.dataset.id = a.id;
+  if (i===0) b.classList.add('active');
+  b.onclick = () => select(a, b);
+  nav.appendChild(b);
+});
+
+function select(a, btn) {
+  current = a;
+  nav.querySelectorAll('button').forEach(x => x.classList.remove('active'));
+  btn.classList.add('active');
+  title.textContent = a.method + ' ' + a.path;
+  hint.textContent = a.hint;
+  renderForm();
+  fill();
+}
+
+function renderForm() {
+  if (current.method === 'GET' && !current.query) {
+    form.innerHTML = '<p class="hint">无请求体</p>';
+    return;
+  }
+  if (current.query) {
+    form.innerHTML = Object.keys(current.example||{}).map(k =>
+      `<label>${k}</label><input data-k="${k}" />`
+    ).join('');
+    return;
+  }
+  form.innerHTML = `<label>JSON Body</label><textarea id="body"></textarea>`;
+}
+
+function fill() {
+  if (!current.example) return;
+  if (current.query) {
+    Object.entries(current.example).forEach(([k,v]) => {
+      const el = form.querySelector(`[data-k="${k}"]`);
+      if (el) el.value = v;
+    });
+    return;
+  }
+  const ta = document.getElementById('body');
+  if (ta) ta.value = JSON.stringify(current.example, null, 2);
+}
+
+document.getElementById('fill').onclick = fill;
+
+document.getElementById('send').onclick = async () => {
+  const base = baseUrl.value.replace(/\/$/, '');
+  let url = base + current.path;
+  const opts = { method: current.method, headers: { 'Content-Type': 'application/json' } };
+  try {
+    if (current.query) {
+      const q = new URLSearchParams();
+      form.querySelectorAll('[data-k]').forEach(el => q.set(el.dataset.k, el.value));
+      url += '?' + q.toString();
+    } else if (current.method !== 'GET') {
+      const ta = document.getElementById('body');
+      opts.body = ta ? ta.value : '{}';
+    }
+    statusEl.textContent = '请求中...';
+    statusEl.className = 'status';
+    const r = await fetch(url, opts);
+    const text = await r.text();
+    let pretty = text;
+    try { pretty = JSON.stringify(JSON.parse(text), null, 2); } catch(_){}
+    resp.textContent = pretty;
+    statusEl.textContent = `HTTP ${r.status}`;
+    statusEl.className = r.ok ? 'status ok' : 'status err';
+  } catch (e) {
+    resp.textContent = String(e);
+    statusEl.textContent = '请求失败';
+    statusEl.className = 'status err';
+  }
+};
+
+renderForm();
+fill();
+</script>
+</body>
+</html>

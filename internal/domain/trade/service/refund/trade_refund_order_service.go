@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	activityentity "group-buy-market/internal/domain/activity/model/entity"
 	"group-buy-market/internal/design/chain"
 	"group-buy-market/internal/domain/trade/adapter/repository"
 	"group-buy-market/internal/domain/trade/model/entity"
@@ -17,7 +16,7 @@ import (
 type ITradeRefundOrderService interface {
 	RefundOrder(ctx context.Context, cmd *entity.TradeRefundCommandEntity) (*entity.TradeRefundBehaviorEntity, error)
 	RestoreTeamLockStock(ctx context.Context, msg *valobj.TeamRefundSuccess) error
-	QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*activityentity.UserGroupBuyOrderDetailEntity, error)
+	QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*entity.TimeoutUnpaidOrderEntity, error)
 }
 
 type TradeRefundOrderService struct {
@@ -52,7 +51,7 @@ func (s *TradeRefundOrderService) RestoreTeamLockStock(ctx context.Context, msg 
 	return strategy.ReverseStock(ctx, msg)
 }
 
-func (s *TradeRefundOrderService) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*activityentity.UserGroupBuyOrderDetailEntity, error) {
+func (s *TradeRefundOrderService) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*entity.TimeoutUnpaidOrderEntity, error) {
 	slog.Info("扫描数据，超时组队未支付订单")
 	return s.repo.QueryTimeoutUnpaidOrderList(ctx)
 }

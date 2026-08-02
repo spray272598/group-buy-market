@@ -2,7 +2,8 @@ package entity
 
 import "time"
 
-// UserGroupBuyOrderDetailEntity 用户拼团明细（首页展示 / 超时退单扫描）
+// UserGroupBuyOrderDetailEntity 用户拼团明细（活动上下文：首页展示用）
+// 超时未支付扫描请用 trade 上下文 TimeoutUnpaidOrderEntity，避免跨上下文污染。
 type UserGroupBuyOrderDetailEntity struct {
 	UserID         string
 	TeamID         string
@@ -13,6 +14,4 @@ type UserGroupBuyOrderDetailEntity struct {
 	ValidStartTime time.Time
 	ValidEndTime   time.Time
 	OutTradeNo     string
-	Source         string
-	Channel        string
 }

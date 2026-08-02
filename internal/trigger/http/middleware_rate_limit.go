@@ -9,7 +9,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"group-buy-market/internal/types/enums"
-	"group-buy-market/internal/types/response"
+	"group-buy-market/internal/api/response"
 )
 
 // RateLimiter 简易令牌桶限流（对齐 Java @RateLimiterAccessInterceptor 语义）

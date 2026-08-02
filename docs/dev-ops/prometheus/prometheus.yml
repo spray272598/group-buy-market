@@ -1,8 +1,13 @@
 global:
   scrape_interval: 15s
+  evaluation_interval: 15s
 
 scrape_configs:
   - job_name: group-buy-market
-    static_configs:
-      - targets: ["host.docker.internal:8091"]
     metrics_path: /metrics
+    static_configs:
+      # 本机 Go 进程（Docker Desktop / Linux host-gateway）
+      - targets: ["host.docker.internal:8091"]
+        labels:
+          app: group-buy-market
+          env: local

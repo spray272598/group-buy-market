@@ -1,20 +1,16 @@
+// Package response 兼容层：统一响应已迁至 api/response。
+// 新代码请使用 group-buy-market/internal/api/response。
 package response
 
-// Response 统一 API 响应结构
-type Response[T any] struct {
-	Code string `json:"code"`
-	Info string `json:"info"`
-	Data T      `json:"data,omitempty"`
-}
+import apiresp "group-buy-market/internal/api/response"
+
+// Response 类型别名
+type Response[T any] = apiresp.Response[T]
 
 func Success[T any](data T) Response[T] {
-	return Response[T]{Code: "0000", Info: "成功", Data: data}
+	return apiresp.Success(data)
 }
 
 func Fail[T any](code, info string) Response[T] {
-	return Response[T]{Code: code, Info: info}
-}
-
-func FailCode[T any](code, info string) Response[T] {
-	return Fail[T](code, info)
+	return apiresp.Fail[T](code, info)
 }

@@ -1,0 +1,61 @@
+# 仅 ELK 栈（可单独启动，需已有 gbm-network 或自行改 networks）
+# docker compose -f docker-compose-environment.yml -f docker-compose-elk.yml up -d
+version: "3.9"
+
+services:
+  elasticsearch:
+    image: elasticsearch:7.17.28
+    container_name: gbm-elasticsearch
+    restart: always
+    environment:
+      - discovery.type=single-node
+      - cluster.name=gbm-es
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+      - xpack.security.enabled=false
+    ports:
+      - "9200:9200"
+    volumes:
+      - gbm-es-data:/usr/share/elasticsearch/data
+    networks:
+      - gbm-network
+
+  logstash:
+    image: logstash:7.17.28
+    container_name: gbm-logstash
+    restart: always
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    ports:
+      - "4560:4560"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: -Xms512m -Xmx512m
+      TZ: Asia/Shanghai
+    depends_on:
+      - elasticsearch
+    networks:
+      - gbm-network
+
+  kibana:
+    image: kibana:7.17.28
+    container_name: gbm-kibana
+    restart: always
+    ports:
+      - "5601:5601"
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      I18N_LOCALE: zh-CN
+    volumes:
+      - ./kibana/config/kibana.yml:/usr/share/kibana/config/kibana.yml:ro
+    depends_on:
+      - elasticsearch
+    networks:
+      - gbm-network
+
+volumes:
+  gbm-es-data:
+
+networks:
+  gbm-network:
+    external: true
+    name: gbm-network

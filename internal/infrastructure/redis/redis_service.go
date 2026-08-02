@@ -111,6 +111,39 @@ func (s *Service) TryLockWait(ctx context.Context, key string, wait, lease time.
 	}
 }
 
+// Publish Redis Pub/Sub 发布（DCC 跨实例）
+func (s *Service) Publish(ctx context.Context, channel string, message string) error {
+	return s.client.Publish(ctx, channel, message).Err()
+}
+
+// Subscribe Redis Pub/Sub 订阅，handler 在独立 goroutine 中串行调用
+func (s *Service) Subscribe(ctx context.Context, channel string, handler func(payload string)) error {
+	pubsub := s.client.Subscribe(ctx, channel)
+	// 等待订阅确认
+	if _, err := pubsub.Receive(ctx); err != nil {
+		_ = pubsub.Close()
+		return err
+	}
+	ch := pubsub.Channel()
+	go func() {
+		defer pubsub.Close()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case msg, ok := <-ch:
+				if !ok {
+					return
+				}
+				if msg != nil {
+					handler(msg.Payload)
+				}
+			}
+		}
+	}()
+	return nil
+}
+
 func (s *Service) Close() error {
 	return s.client.Close()
 }

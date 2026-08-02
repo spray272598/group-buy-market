@@ -1,0 +1,182 @@
+openapi: 3.0.3
+info:
+  title: Group Buy Market API
+  description: |
+    拼团营销 Go DDD 版 HTTP 接口（对齐 Java group-buy-market）。
+    本地默认端口 8091。
+  version: 1.0.0
+servers:
+  - url: http://127.0.0.1:8091
+    description: local
+tags:
+  - name: index
+  - name: trade
+  - name: dcc
+  - name: tag
+  - name: system
+paths:
+  /health:
+    get:
+      tags: [system]
+      summary: 健康检查
+      responses:
+        "200":
+          description: ok
+  /metrics:
+    get:
+      tags: [system]
+      summary: Prometheus metrics
+      responses:
+        "200":
+          description: prometheus text
+  /api/v1/gbm/index/query_group_buy_market_config:
+    post:
+      tags: [index]
+      summary: 查询拼团营销配置（试算+在拼团+统计）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GoodsMarketRequest"
+            example:
+              userId: xfg01
+              source: s01
+              channel: c01
+              goodsId: "9890001"
+      responses:
+        "200":
+          description: Response wrapper
+  /api/v1/gbm/trade/lock_market_pay_order:
+    post:
+      tags: [trade]
+      summary: 营销锁单（开团/参团）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LockRequest"
+            example:
+              userId: xfg01
+              activityId: 100123
+              goodsId: "9890001"
+              source: s01
+              channel: c01
+              outTradeNo: "100000000001"
+              notifyConfigVO:
+                notifyType: MQ
+      responses:
+        "200":
+          description: ok
+  /api/v1/gbm/trade/settlement_market_pay_order:
+    post:
+      tags: [trade]
+      summary: 支付成功结算
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettlementRequest"
+      responses:
+        "200":
+          description: ok
+  /api/v1/gbm/trade/refund_market_pay_order:
+    post:
+      tags: [trade]
+      summary: 退单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefundRequest"
+      responses:
+        "200":
+          description: ok
+  /api/v1/gbm/dcc/query:
+    get:
+      tags: [dcc]
+      summary: 查询动态配置快照
+      responses:
+        "200":
+          description: ok
+  /api/v1/gbm/dcc/update_config:
+    get:
+      tags: [dcc]
+      summary: 更新配置并跨实例广播
+      parameters:
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [downgradeSwitch, cutRange, scBlacklist, cacheSwitch]
+        - name: value
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+  /api/v1/gbm/tag/exec_tag_batch_job:
+    get:
+      tags: [tag]
+      summary: 执行人群标签批次（DB+Redis BitSet）
+      parameters:
+        - name: tagId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: batchId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: ok
+components:
+  schemas:
+    GoodsMarketRequest:
+      type: object
+      required: [userId, source, channel, goodsId]
+      properties:
+        userId: { type: string }
+        source: { type: string }
+        channel: { type: string }
+        goodsId: { type: string }
+    LockRequest:
+      type: object
+      properties:
+        userId: { type: string }
+        teamId: { type: string }
+        activityId: { type: integer, format: int64 }
+        goodsId: { type: string }
+        source: { type: string }
+        channel: { type: string }
+        outTradeNo: { type: string }
+        notifyConfigVO:
+          type: object
+          properties:
+            notifyType: { type: string, enum: [HTTP, MQ] }
+            notifyUrl: { type: string }
+            notifyMQ: { type: string }
+    SettlementRequest:
+      type: object
+      properties:
+        userId: { type: string }
+        source: { type: string }
+        channel: { type: string }
+        outTradeNo: { type: string }
+        outTradeTime: { type: string, format: date-time }
+    RefundRequest:
+      type: object
+      properties:
+        userId: { type: string }
+        outTradeNo: { type: string }
+        source: { type: string }
+        channel: { type: string }

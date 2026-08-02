@@ -1,0 +1,31 @@
+# 仅 Grafana（依赖 environment 中的 prometheus）
+# docker compose -f docker-compose-environment.yml -f docker-compose-grafana.yml up -d
+version: "3.9"
+
+services:
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: gbm-grafana
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      TZ: Asia/Shanghai
+    volumes:
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - gbm-grafana-data:/var/lib/grafana
+    networks:
+      - gbm-network
+
+volumes:
+  gbm-grafana-data:
+
+networks:
+  gbm-network:
+    external: true
+    name: gbm-network

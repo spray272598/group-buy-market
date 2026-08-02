@@ -12,7 +12,6 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
-	activityentity "group-buy-market/internal/domain/activity/model/entity"
 	traderepo "group-buy-market/internal/domain/trade/adapter/repository"
 	"group-buy-market/internal/domain/trade/model/aggregate"
 	"group-buy-market/internal/domain/trade/model/entity"
@@ -607,7 +606,7 @@ func (r *TradeRepository) insertRefundNotify(tx *gorm.DB, order *entity.TradeRef
 	return toNotifyEntity(&task), nil
 }
 
-func (r *TradeRepository) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*activityentity.UserGroupBuyOrderDetailEntity, error) {
+func (r *TradeRepository) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*entity.TimeoutUnpaidOrderEntity, error) {
 	var lists []po.GroupBuyOrderList
 	err := r.db.WithContext(ctx).
 		Where("status = 0 AND out_trade_time IS NULL AND ? > end_time", time.Now()).
@@ -617,7 +616,7 @@ func (r *TradeRepository) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*a
 		return nil, err
 	}
 	if len(lists) == 0 {
-		return []*activityentity.UserGroupBuyOrderDetailEntity{}, nil
+		return []*entity.TimeoutUnpaidOrderEntity{}, nil
 	}
 	teamIDs := make([]string, 0, len(lists))
 	for _, l := range lists {
@@ -631,13 +630,13 @@ func (r *TradeRepository) QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*a
 	for _, t := range teams {
 		teamMap[t.TeamID] = t
 	}
-	result := make([]*activityentity.UserGroupBuyOrderDetailEntity, 0, len(lists))
+	result := make([]*entity.TimeoutUnpaidOrderEntity, 0, len(lists))
 	for _, l := range lists {
 		t, ok := teamMap[l.TeamID]
 		if !ok {
 			continue
 		}
-		result = append(result, &activityentity.UserGroupBuyOrderDetailEntity{
+		result = append(result, &entity.TimeoutUnpaidOrderEntity{
 			UserID:         l.UserID,
 			TeamID:         t.TeamID,
 			ActivityID:     t.ActivityID,

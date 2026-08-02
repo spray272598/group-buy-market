@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,9 +23,10 @@ import (
 	"group-buy-market/internal/domain/trade/service/settlement"
 	"group-buy-market/internal/domain/trade/service/task"
 	"group-buy-market/internal/infrastructure/dcc"
+	"group-buy-market/internal/application"
+	"group-buy-market/internal/infrastructure/acl"
 	"group-buy-market/internal/infrastructure/gateway"
 	"group-buy-market/internal/infrastructure/mq"
-	"group-buy-market/internal/infrastructure/notify"
 	"group-buy-market/internal/infrastructure/redis"
 	infrarepo "group-buy-market/internal/infrastructure/repository"
 	triggerhttp "group-buy-market/internal/trigger/http"
@@ -75,8 +77,11 @@ func NewApplication(cfg *Config) (*Application, error) {
 		cancel()
 	}
 
-	// ----- DCC -----
+	// ----- DCC（Redis Pub/Sub 跨实例配置同步，对齐 Java RTopic）-----
 	dccSvc := dcc.New(cfg.DCC.DowngradeSwitch, cfg.DCC.CutRange, cfg.DCC.SCBlacklist, cfg.DCC.CacheSwitch)
+	instanceID := firstNonEmpty(os.Getenv("GBM_INSTANCE_ID"), fmt.Sprintf("pid-%d", os.Getpid()))
+	dccSvc.EnableBroadcast(rdb, rdb, dcc.DefaultChannel, instanceID)
+	slog.Info("DCC 跨实例广播已启用", "channel", dcc.DefaultChannel, "instance", instanceID)
 
 	// ----- RabbitMQ -----
 	var mqClient *mq.Client
@@ -99,7 +104,8 @@ func NewApplication(cfg *Config) (*Application, error) {
 
 	publisher := mq.NewEventPublisher(mqClient)
 	httpGW := gateway.NewGroupBuyNotifyService(cfg.Notify.HTTPTimeoutSec)
-	tradePort := notify.NewTradePort(rdb, httpGW, publisher)
+	// 出站防腐层：领域 ITradePort → HTTP/MQ
+	tradePort := acl.NewTradeNotifyACL(rdb, httpGW, publisher)
 
 	// ----- Repositories（实现领域端口）-----
 	activityRepo := infrarepo.NewActivityRepository(db, rdb, dccSvc)
@@ -127,12 +133,16 @@ func NewApplication(cfg *Config) (*Application, error) {
 	)
 	refundSvc := refund.NewTradeRefundOrderService(tradeRepo, refundStrategies)
 
+	// ----- Application（用例 + 入站防腐 assembler）-----
+	indexApp := application.NewMarketIndexAppService(indexSvc)
+	tradeApp := application.NewMarketTradeAppService(indexSvc, lockSvc, settlementSvc, refundSvc)
+
 	// ----- MQ consumers -----
 	if err := listener.StartConsumers(mqClient, refundSvc); err != nil {
 		slog.Error("启动 MQ 消费者失败", "err", err)
 	}
 
-	// ----- HTTP Trigger -----
+	// ----- HTTP Trigger（仅协议适配）-----
 	if cfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -141,8 +151,9 @@ func NewApplication(cfg *Config) (*Application, error) {
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	rlStore := triggerhttp.NewRateLimitStore(cfg.RateLimit.IndexQPS, cfg.RateLimit.Burst)
-	triggerhttp.NewMarketIndexController(indexSvc, rlStore).Register(engine)
-	triggerhttp.NewMarketTradeController(indexSvc, lockSvc, settlementSvc, refundSvc).Register(engine)
+	triggerhttp.RegisterStatic(engine, "web/static")
+	triggerhttp.NewMarketIndexController(indexApp, rlStore).Register(engine)
+	triggerhttp.NewMarketTradeController(tradeApp).Register(engine)
 	triggerhttp.NewDCCController(dccSvc).Register(engine)
 	triggerhttp.NewTagController(tagSvc).Register(engine)
 	triggerhttp.NewTestAPIController().Register(engine)

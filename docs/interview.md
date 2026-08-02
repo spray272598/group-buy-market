@@ -4,11 +4,13 @@
 
 Go 实现的 **拼团营销中台**：DDD 拆分活动试算、交易锁单/结算/退单、人群标签；用责任链把规则显式化；用 Redis 库存 + 本地消息表 + RabbitMQ 保证高并发与最终一致。
 
-## 2. 为什么 DDD
+## 2. 为什么 DDD + 独立 api 层
 
 - 规则多：降级、切量、人群、参与次数、库存、成团条件、三种退单。
 - 若写成 Controller 堆 if-else，扩展一个折扣/退单类型就要改核心流。
 - **领域服务 + 责任链/策略**：开闭原则；仓储端口方便单测 mock。
+- **api 层**：对外 DTO/接口与领域实体分离（对齐 Java `group-buy-market-api`），防腐 + 多入口复用。  
+  详见 [architecture-layers.md](./architecture-layers.md)。
 
 ## 3. 核心链路怎么讲
 

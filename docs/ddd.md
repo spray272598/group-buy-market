@@ -6,35 +6,53 @@
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  trigger（用户接口层 / 触发器）                            │
-│  HTTP Controller、定时 Job、消息 Listener                  │
+│  trigger（入站适配器）  HTTP / Job / MQ Listener           │
+│  只做协议 bind，不写业务                                    │
+└───────────────────────────┬─────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│  api（对外契约）DTO + 用例接口                              │
+└───────────────────────────┬─────────────────────────────┘
+                            │ 由 application 实现
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│  application（用例编排 + 入站防腐 assembler）               │
 └───────────────────────────┬─────────────────────────────┘
                             │ 调用
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│  domain（领域层） ★ 核心，不依赖外设                        │
-│  model(entity/valobj/aggregate) + service + adapter端口   │
+│  domain（领域）+ design（模式骨架）+ 出站 port              │
 └───────────────────────────┬─────────────────────────────┘
-                            │ 端口由基础设施实现
+                            │ 实现仓储 / 出站 ACL
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│  infrastructure（基础设施层）                              │
-│  Repository 实现、Redis、DCC、HTTP/MQ 通知、GORM/PO        │
-└─────────────────────────────────────────────────────────┘
-                            ▲
-┌───────────────────────────┴─────────────────────────────┐
-│  app / cmd（组装根 Composition Root）                     │
-│  读取配置、注入依赖、启动 HTTP & Job                        │
+│  infrastructure（repository + acl + redis/mq）            │
 └─────────────────────────────────────────────────────────┘
 ```
+
+**防腐层（ACL）**：入站 `application/assembler`，出站 `infrastructure/acl`。详见 [acl.md](./acl.md)。
+
+### 为什么需要独立 api 层？
+
+| 理由 | 说明 |
+|------|------|
+| **契约稳定** | 前端/调用方只依赖 DTO，领域实体可自由演进 |
+| **与领域解耦** | Controller 不做「贫血 DTO 当领域模型」 |
+| **多入口复用** | HTTP / 未来 gRPC / 测试脚本共用同一接口定义 |
+| **对齐原 Java 工程** | `group-buy-market-api` 模块，秋招可对照讲解 |
+| **编译期约束** | `var _ api.IMarketTradeService = (*MarketTradeController)(nil)` |
+
+**不需要把业务写在 api 层**：api 只定义「说什么」；domain 定义「怎么做」；trigger 负责「从 HTTP 进来」。
 
 **依赖铁律：**
 
 | 层 | 可以依赖 | 禁止依赖 |
 |----|---------|---------|
-| domain | types、design（纯抽象） | infrastructure、trigger、gin、gorm、redis 客户端 |
-| infrastructure | domain 端口接口、外部中间件 | 不调用 trigger |
-| trigger | domain 服务接口、DTO | 不直接访问 DAO/SQL |
+| **api** | 仅标准库 / decimal 等纯类型 | domain、infrastructure、gin |
+| domain | types、design | api、infrastructure、gin、gorm |
+| infrastructure | domain 端口 | trigger、api（可选依赖 types） |
+| trigger | api、domain 服务接口 | 直接访问 DAO/SQL |
 | app | 所有层（仅组装） | 不含业务规则 |
 
 ## 2. 限界上下文（Bounded Context）
@@ -136,18 +154,46 @@
 
 | Java 模块 | Go 路径 |
 |-----------|---------|
+| **group-buy-market-api** | **`internal/api`**（dto / response / 服务接口） |
 | group-buy-market-types | `internal/types` |
 | group-buy-market-domain | `internal/domain` |
 | group-buy-market-infrastructure | `internal/infrastructure` |
-| group-buy-market-trigger | `internal/trigger` |
-| group-buy-market-api | `internal/trigger/http` DTO + response |
+| group-buy-market-trigger | `internal/trigger`（实现 api 接口） |
 | group-buy-market-app | `internal/app` + `cmd/server` |
 | wrench design chain/tree | `internal/design/chain`、`tree` |
 
-## 6. 秋招面试可讲点
+### api 包结构
+
+```
+internal/api/
+├── doc.go                      # 包说明
+├── market_index_service.go     # IMarketIndexService
+├── market_trade_service.go     # IMarketTradeService
+├── dcc_service.go              # IDCCService
+├── tag_service.go              # ITagService
+├── dto/                        # 请求/响应 DTO
+└── response/                   # 统一 Response[T]
+```
+
+## 6. design 层是什么？
+
+**不是业务层。** 是与业务无关的设计模式框架（对齐 Java `wrench.design.framework`）：
+
+- `design/chain` — 责任链骨架  
+- `design/tree` — 策略树骨架  
+
+领域服务（锁单/结算/退单）**挂载业务节点**到链上。详见 [design-layer.md](./design-layer.md)。
+
+## 7. DDD 是否合规？
+
+依赖扫描结论：**基本合规**（domain 不依赖 infra/api/框架）。  
+完整审计见 [ddd-compliance-audit.md](./ddd-compliance-audit.md)。
+
+## 8. 秋招面试可讲点
 
 1. **为何 DDD**：拼团规则复杂（试算、库存、成团、逆向），用领域模型+责任链把规则显式化，便于扩展新折扣/新退单类型。  
 2. **依赖倒置**：领域定义接口，基础设施实现，测试可用 mock 仓储。  
-3. **事务边界**：锁单/结算/退单以聚合为单位，避免贫血 CRUD。  
-4. **缓存库存**：Redis incr 降压 DB，失败 recovery 补偿。  
-5. **本地消息表**：notify_task + 定时补偿，保证成团回调最终一致。  
+3. **api 与 design**：api 是对外契约；design 是模式骨架；都不是「乱加一层」。  
+4. **事务边界**：锁单/结算/退单以聚合为单位，避免贫血 CRUD。  
+5. **缓存库存**：Redis incr 降压 DB，失败 recovery 补偿。  
+6. **本地消息表**：notify_task + 定时补偿，保证成团回调最终一致。  

@@ -2,6 +2,30 @@
 
 Base URL: `http://127.0.0.1:8091`
 
+**交互式文档（推荐）：**
+
+- API 测试台：http://127.0.0.1:8091/test/
+- Swagger UI：http://127.0.0.1:8091/swagger/
+- OpenAPI：http://127.0.0.1:8091/openapi.yaml
+
+> 是否需要 Swagger？**需要。** 本项目已内置 OpenAPI 3 + Swagger UI，便于秋招演示与自测。
+
+## 代码中的 api 层（契约）
+
+对外契约在 `internal/api`（**不是**塞在 Controller 里）：
+
+| 契约接口 | 实现（trigger） | 说明 |
+|----------|-----------------|------|
+| `IMarketIndexService` | `MarketIndexController` | 首页试算配置 |
+| `IMarketTradeService` | `MarketTradeController` | 锁单/结算/退单 |
+| `IDCCService` | `DCCController` | 动态配置 |
+| `ITagService` | `TagController` | 人群打标 |
+
+DTO：`internal/api/dto`  
+统一响应：`internal/api/response.Response[T]`  
+
+分层说明见 [architecture-layers.md](./architecture-layers.md)、[ddd.md](./ddd.md)。
+
 统一响应：
 
 ```json

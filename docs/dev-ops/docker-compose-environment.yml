@@ -1,7 +1,12 @@
-# 本地中间件一键启动（对齐 Java docs/dev-ops）
-# 使用：在 docs/dev-ops 目录执行
+# 本地中间件一键启动（核心：MySQL / Redis / RabbitMQ / 可视化 / Prometheus）
+# 用法：
+#   cd docs/dev-ops
 #   docker compose -f docker-compose-environment.yml up -d
+# 可选观测栈：
+#   docker compose -f docker-compose-environment.yml -f docker-compose-observability.yml up -d
 version: "3.9"
+
+name: group-buy-market
 
 services:
   mysql:
@@ -23,7 +28,7 @@ services:
       interval: 5s
       timeout: 10s
       retries: 15
-      start_period: 20s
+      start_period: 25s
     networks:
       - gbm-network
 
@@ -97,7 +102,6 @@ services:
     networks:
       - gbm-network
 
-  # 可选：Prometheus 抓取应用 /metrics
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: gbm-prometheus
@@ -106,14 +110,19 @@ services:
       - "9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - gbm-prom-data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - gbm-network
 
 networks:
   gbm-network:
+    name: gbm-network
     driver: bridge
 
 volumes:
   gbm-mysql-data:
   gbm-redis-data:
   gbm-rabbitmq-data:
+  gbm-prom-data:

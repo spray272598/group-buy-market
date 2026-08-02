@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 
-	activityentity "group-buy-market/internal/domain/activity/model/entity"
 	"group-buy-market/internal/domain/trade/model/aggregate"
 	"group-buy-market/internal/domain/trade/model/entity"
 	"group-buy-market/internal/domain/trade/model/valobj"
@@ -29,7 +28,7 @@ type ITradeRepository interface {
 	Unpaid2Refund(ctx context.Context, agg *aggregate.GroupBuyRefundAggregate) (*entity.NotifyTaskEntity, error)
 	Paid2Refund(ctx context.Context, agg *aggregate.GroupBuyRefundAggregate) (*entity.NotifyTaskEntity, error)
 	PaidTeam2Refund(ctx context.Context, agg *aggregate.GroupBuyRefundAggregate) (*entity.NotifyTaskEntity, error)
-	QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*activityentity.UserGroupBuyOrderDetailEntity, error)
+	QueryTimeoutUnpaidOrderList(ctx context.Context) ([]*entity.TimeoutUnpaidOrderEntity, error)
 	// RefundOrderExist 检查退单任务是否已存在（幂等）
 	RefundOrderExist(ctx context.Context, teamID, category, orderID string) (bool, error)
 	// Refund2AddRecovery 退单恢复 Redis 锁单库存（带 orderId 分布式锁防重）
