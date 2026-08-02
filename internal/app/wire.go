@@ -22,10 +22,11 @@ import (
 	"group-buy-market/internal/domain/trade/service/refund/business"
 	"group-buy-market/internal/domain/trade/service/settlement"
 	"group-buy-market/internal/domain/trade/service/task"
-	"group-buy-market/internal/infrastructure/dcc"
 	"group-buy-market/internal/application"
 	"group-buy-market/internal/infrastructure/acl"
+	"group-buy-market/internal/infrastructure/dcc"
 	"group-buy-market/internal/infrastructure/gateway"
+	"group-buy-market/internal/infrastructure/metrics"
 	"group-buy-market/internal/infrastructure/mq"
 	"group-buy-market/internal/infrastructure/redis"
 	infrarepo "group-buy-market/internal/infrastructure/repository"
@@ -43,8 +44,9 @@ type Application struct {
 	DCC    *dcc.Service
 	Engine *gin.Engine
 
-	notifyJob  *job.NotifyJob
-	timeoutJob *job.TimeoutRefundJob
+	notifyJob   *job.NotifyJob
+	timeoutJob  *job.TimeoutRefundJob
+	collectors  *metrics.Collectors
 }
 
 func NewApplication(cfg *Config) (*Application, error) {
@@ -147,7 +149,7 @@ func NewApplication(cfg *Config) (*Application, error) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
-	engine.Use(gin.Recovery(), gin.Logger())
+	engine.Use(gin.Recovery(), gin.Logger(), triggerhttp.MetricsMiddleware())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	rlStore := triggerhttp.NewRateLimitStore(cfg.RateLimit.IndexQPS, cfg.RateLimit.Burst)
@@ -162,6 +164,22 @@ func NewApplication(cfg *Config) (*Application, error) {
 	notifyJob := job.NewNotifyJob(taskSvc, rdb, cfg.Job.NotifyIntervalSec)
 	timeoutJob := job.NewTimeoutRefundJob(refundSvc, rdb, cfg.Job.TimeoutRefundIntervalSec)
 
+	// ----- 全链路采集：DB 连接池 + MySQL/Redis/MQ 健康探针 -----
+	collectors := metrics.StartCollectors(sqlDB, map[string]metrics.DepChecker{
+		"mysql": func(ctx context.Context) error {
+			return sqlDB.PingContext(ctx)
+		},
+		"redis": func(ctx context.Context) error {
+			return rdb.Ping(ctx)
+		},
+		"rabbitmq": func(ctx context.Context) error {
+			if mqClient == nil {
+				return fmt.Errorf("rabbitmq not connected")
+			}
+			return nil
+		},
+	})
+
 	return &Application{
 		Config:     cfg,
 		DB:         db,
@@ -171,6 +189,7 @@ func NewApplication(cfg *Config) (*Application, error) {
 		Engine:     engine,
 		notifyJob:  notifyJob,
 		timeoutJob: timeoutJob,
+		collectors: collectors,
 	}, nil
 }
 
@@ -189,6 +208,9 @@ func (a *Application) Start() error {
 func (a *Application) Stop() {
 	a.notifyJob.Stop()
 	a.timeoutJob.Stop()
+	if a.collectors != nil {
+		a.collectors.Stop()
+	}
 	if a.MQ != nil {
 		_ = a.MQ.Close()
 	}

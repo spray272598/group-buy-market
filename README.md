@@ -14,7 +14,7 @@ Java「小傅哥拼团」完整 Go 重写：**严格 DDD** + 责任链/策略树
 | 设计模式 | 试算策略树、锁单/结算/退单责任链、折扣/退单策略 |
 | 高并发 | Redis 组队库存 occupy + recovery；回调/Job 分布式锁 |
 | 最终一致 | 本地消息表 `notify_task` + 定时补偿 + MQ 重试 |
-| 可运维 | Docker Compose 中间件、Prometheus `/metrics`、DCC 热更新 |
+| 可运维 | 限流 + Prometheus/Grafana 全链路看板 + 告警、DCC 热更新 |
 | 完整链路 | 试算→锁单→结算成团→回调→退单逆向→超时退单 |
 
 ---
@@ -101,6 +101,8 @@ go run ./cmd/server -config configs/config.yaml
 |------|------|
 | **API 测试页面** | http://127.0.0.1:8091/test/ |
 | **Swagger UI** | http://127.0.0.1:8091/swagger/ |
+| Grafana 全链路 | http://127.0.0.1:3000 → **Full Stack** + **Dependencies** |
+| Prometheus | http://127.0.0.1:9090/targets （app/mysql/redis/rabbitmq） |
 | Grafana + ELK | `docker compose -f docker-compose-environment.yml -f docker-compose-observability.yml up -d` |
 
 ### 4）冒烟

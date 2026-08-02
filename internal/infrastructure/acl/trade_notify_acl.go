@@ -9,6 +9,7 @@ import (
 	"group-buy-market/internal/domain/trade/model/entity"
 	"group-buy-market/internal/domain/trade/model/valobj"
 	"group-buy-market/internal/infrastructure/gateway"
+	"group-buy-market/internal/infrastructure/metrics"
 	"group-buy-market/internal/infrastructure/mq"
 	redisx "group-buy-market/internal/infrastructure/redis"
 	"group-buy-market/internal/types/enums"
@@ -44,10 +45,12 @@ func (p *TradeNotifyACL) GroupBuyNotify(ctx context.Context, task *entity.Notify
 	lockKey := task.LockKey()
 	ok, err := p.redis.TryLockWait(ctx, lockKey, 3*time.Second, 30*time.Second)
 	if err != nil {
+		metrics.ObserveNotify("lock", "error")
 		slog.Error("回调任务抢锁异常", "lockKey", lockKey, "err", err)
 		return enums.NotifyTaskHTTPNull, nil
 	}
 	if !ok {
+		metrics.ObserveNotify("lock", "skip")
 		slog.Info("回调任务未抢到锁，跳过", "lockKey", lockKey)
 		return enums.NotifyTaskHTTPNull, nil
 	}
@@ -56,21 +59,34 @@ func (p *TradeNotifyACL) GroupBuyNotify(ctx context.Context, task *entity.Notify
 	switch valobj.NotifyType(task.NotifyType) {
 	case valobj.NotifyHTTP:
 		if task.NotifyUrl == "" || task.NotifyUrl == "暂无" {
+			metrics.ObserveNotify("http", "noop")
 			return enums.NotifyTaskHTTPSuccess, nil
 		}
 		// ACL：领域参数 → HTTP 网关协议
-		return p.httpGW.GroupBuyNotify(ctx, task.NotifyUrl, task.ParameterJSON)
+		status, err := p.httpGW.GroupBuyNotify(ctx, task.NotifyUrl, task.ParameterJSON)
+		if err != nil || status == enums.NotifyTaskHTTPError {
+			metrics.ObserveNotify("http", "error")
+		} else {
+			metrics.ObserveNotify("http", "success")
+		}
+		return status, err
 	case valobj.NotifyMQ:
 		routingKey := task.NotifyMQ
 		if routingKey == "" {
 			routingKey = "topic.team_success"
 		}
 		// ACL：领域参数 → MQ routingKey + body
+		start := time.Now()
 		if err := p.publish.Publish(ctx, routingKey, task.ParameterJSON); err != nil {
+			metrics.ObserveNotifyDuration("mq", time.Since(start).Seconds())
+			metrics.ObserveNotify("mq", "error")
 			return enums.NotifyTaskHTTPError, err
 		}
+		metrics.ObserveNotifyDuration("mq", time.Since(start).Seconds())
+		metrics.ObserveNotify("mq", "success")
 		return enums.NotifyTaskHTTPSuccess, nil
 	default:
+		metrics.ObserveNotify("unknown", "success")
 		slog.Warn("未知回调类型", "type", task.NotifyType)
 		return enums.NotifyTaskHTTPSuccess, nil
 	}

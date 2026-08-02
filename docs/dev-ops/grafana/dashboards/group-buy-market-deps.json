@@ -1,0 +1,288 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "中间件健康",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "targets": [
+        { "expr": "up{job=\"mysql\"}", "legendFormat": "mysqld-exporter", "refId": "A" },
+        { "expr": "mysql_up", "legendFormat": "mysql_up", "refId": "B" }
+      ],
+      "title": "MySQL",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "targets": [
+        { "expr": "up{job=\"redis\"}", "legendFormat": "redis-exporter", "refId": "A" },
+        { "expr": "redis_up", "legendFormat": "redis_up", "refId": "B" }
+      ],
+      "title": "Redis",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "targets": [{ "expr": "up{job=\"rabbitmq\"}", "legendFormat": "rabbitmq prom", "refId": "A" }],
+      "title": "RabbitMQ scrape",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "options": { "0": { "color": "red", "text": "DOWN" }, "1": { "color": "green", "text": "UP" } }, "type": "value" }],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "red", "value": null }, { "color": "green", "value": 1 }] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "none", "reduceOptions": { "calcs": ["lastNotNull"] }, "textMode": "value_and_name" },
+      "targets": [
+        { "expr": "gbm_dependency_up{name=\"mysql\"}", "legendFormat": "app→mysql", "refId": "A" },
+        { "expr": "gbm_dependency_up{name=\"redis\"}", "legendFormat": "app→redis", "refId": "B" },
+        { "expr": "gbm_dependency_up{name=\"rabbitmq\"}", "legendFormat": "app→mq", "refId": "C" }
+      ],
+      "title": "应用侧探针",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "MySQL",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 6 },
+      "id": 10,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "mysql_global_status_threads_connected", "legendFormat": "threads_connected", "refId": "A" },
+        { "expr": "mysql_global_status_threads_running", "legendFormat": "threads_running", "refId": "B" },
+        { "expr": "mysql_global_variables_max_connections", "legendFormat": "max_connections", "refId": "C" }
+      ],
+      "title": "连接数",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rate(mysql_global_status_questions[1m])", "legendFormat": "questions/s", "refId": "A" },
+        { "expr": "rate(mysql_global_status_queries[1m])", "legendFormat": "queries/s", "refId": "B" },
+        { "expr": "rate(mysql_global_status_slow_queries[5m])", "legendFormat": "slow_queries/s", "refId": "C" }
+      ],
+      "title": "QPS / Slow",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 },
+      "id": 12,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rate(mysql_global_status_innodb_row_lock_waits[5m])", "legendFormat": "row_lock_waits/s", "refId": "A" },
+        { "expr": "mysql_global_status_innodb_row_lock_current_waits", "legendFormat": "current_waits", "refId": "B" }
+      ],
+      "title": "InnoDB 行锁等待",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 },
+      "id": 13,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "mysql_global_status_bytes_received", "legendFormat": "bytes_received(total)", "refId": "A" },
+        { "expr": "mysql_global_status_bytes_sent", "legendFormat": "bytes_sent(total)", "refId": "B" },
+        { "expr": "rate(mysql_global_status_bytes_received[1m])", "legendFormat": "recv B/s", "refId": "C" },
+        { "expr": "rate(mysql_global_status_bytes_sent[1m])", "legendFormat": "sent B/s", "refId": "D" }
+      ],
+      "title": "网络吞吐",
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 },
+      "id": 102,
+      "title": "Redis",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 21 },
+      "id": 20,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rate(redis_commands_processed_total[1m])", "legendFormat": "commands/s", "refId": "A" },
+        { "expr": "redis_connected_clients", "legendFormat": "clients", "refId": "B" }
+      ],
+      "title": "命令处理 / 客户端",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 21 },
+      "id": 21,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "redis_memory_used_bytes", "legendFormat": "used", "refId": "A" },
+        { "expr": "redis_memory_max_bytes", "legendFormat": "max", "refId": "B" }
+      ],
+      "title": "内存",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
+      "id": 22,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "redis_keyspace_hits_total", "legendFormat": "hits", "refId": "A" },
+        { "expr": "redis_keyspace_misses_total", "legendFormat": "misses", "refId": "B" },
+        { "expr": "rate(redis_keyspace_hits_total[5m]) / clamp_min(rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m]), 1e-9)", "legendFormat": "hit ratio", "refId": "C" }
+      ],
+      "title": "命中率相关",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
+      "id": 23,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "redis_commands_duration_seconds_total / clamp_min(redis_commands_total, 1)", "legendFormat": "avg cmd duration (approx)", "refId": "A" }
+      ],
+      "title": "命令耗时（exporter-exporter 可用时）",
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 },
+      "id": 103,
+      "title": "RabbitMQ",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 36 },
+      "id": 30,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rabbitmq_queue_messages", "legendFormat": "{{queue}} ready+unacked", "refId": "A" },
+        { "expr": "rabbitmq_queue_messages_ready", "legendFormat": "{{queue}} ready", "refId": "B" },
+        { "expr": "rabbitmq_queue_messages_unacked", "legendFormat": "{{queue}} unacked", "refId": "C" }
+      ],
+      "title": "队列堆积",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 36 },
+      "id": 31,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rate(rabbitmq_global_messages_received_total[1m])", "legendFormat": "recv/s", "refId": "A" },
+        { "expr": "rate(rabbitmq_global_messages_confirmed_total[1m])", "legendFormat": "confirmed/s", "refId": "B" },
+        { "expr": "rate(rabbitmq_global_messages_delivered_total[1m])", "legendFormat": "delivered/s", "refId": "C" }
+      ],
+      "title": "消息吞吐",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 43 },
+      "id": 32,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rabbitmq_connections", "legendFormat": "connections", "refId": "A" },
+        { "expr": "rabbitmq_channels", "legendFormat": "channels", "refId": "B" },
+        { "expr": "rabbitmq_consumers", "legendFormat": "consumers", "refId": "C" }
+      ],
+      "title": "连接 / Channel / Consumer",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 12, "lineWidth": 2, "showPoints": "never" } }, "overrides": [] },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 43 },
+      "id": 33,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } },
+      "targets": [
+        { "expr": "rabbitmq_process_resident_memory_bytes", "legendFormat": "rss", "refId": "A" },
+        { "expr": "rabbitmq_resident_memory_limit_bytes", "legendFormat": "limit", "refId": "B" }
+      ],
+      "title": "RabbitMQ 内存",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": ["group-buy-market", "mysql", "redis", "rabbitmq", "middleware"],
+  "templating": { "list": [] },
+  "time": { "from": "now-30m", "to": "now" },
+  "timezone": "browser",
+  "title": "Group Buy Market · Dependencies",
+  "uid": "gbm-deps",
+  "version": 1,
+  "description": "中间件全链路：MySQL / Redis / RabbitMQ exporter + 应用侧依赖探针"
+}

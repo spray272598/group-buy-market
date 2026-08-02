@@ -46,12 +46,24 @@ A: domain 不依赖 gorm/gin；infrastructure 实现端口；app 组装。
 
 ## 5. 可展示的扩展
 
-- 限流（userId QPS）
-- Prometheus metrics
+- **限流**：`userId` 维度令牌桶（`golang.org/x/time/rate`），超限业务码 `0006`
+- **Prometheus + Grafana 全链路**：
+  - 应用：`gbm_http_*` / 业务码 / 限流 / 库存 / DCC / Job / Notify / MQ 客户端 / Redis 客户端 / DB 连接池 / 依赖探针
+  - 中间件：mysqld-exporter、redis-exporter、RabbitMQ `rabbitmq_prometheus`
+  - 双看板：Full Stack + Dependencies；规则告警覆盖入口/依赖/库存/MQ
 - Docker 一键中间件
 - Tag BitSet 人群（百万级判断 O(1)）
+- ELK：Logstash TCP → ES → Kibana（可选）
+
+### 面试怎么讲监控
+
+1. **分层**：入口 RED → 业务码/库存/限流 → 异步 Job/Notify/MQ → 依赖客户端与连接池 → 中间件 Exporter → Runtime  
+2. **限流可观测**：deny 计数 + 业务码 `0006`，不会被 HTTP 200 掩盖  
+3. **依赖双视角**：应用探针 `gbm_dependency_up` + exporter `mysql_up`/`redis_up`，区分「进程挂了」和「业务连不上」  
+4. **告警**：TargetDown、依赖 Down、5xx/P95、限流、业务成功率、库存 fail、Redis/MQ 错误、DB 池饱和  
 
 ## 6. 诚实边界
 
 - MQ 消费侧示例业务（成团成功）以日志/库存恢复为主，可接商城履约。
-- 未做完整 ELK 链路（可讲日志规范与扩展点）。
+- 未做分布式 Tracing（OpenTelemetry）；指标 + 日志可关联 path/业务码排查。
+

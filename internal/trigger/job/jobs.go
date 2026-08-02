@@ -8,6 +8,7 @@ import (
 	"group-buy-market/internal/domain/trade/model/entity"
 	"group-buy-market/internal/domain/trade/service/refund"
 	"group-buy-market/internal/domain/trade/service/task"
+	"group-buy-market/internal/infrastructure/metrics"
 	redisx "group-buy-market/internal/infrastructure/redis"
 )
 
@@ -47,20 +48,26 @@ func (j *NotifyJob) Start() {
 }
 
 func (j *NotifyJob) exec() {
+	start := time.Now()
 	ctx := context.Background()
 	lockKey := "group_buy_market_notify_job_exec"
 	ok, err := j.redis.TryLockWait(ctx, lockKey, 3*time.Second, 50*time.Second)
 	if err != nil || !ok {
+		metrics.ObserveJob("notify", "skip_lock")
 		return
 	}
 	defer func() { _ = j.redis.Unlock(context.Background(), lockKey) }()
 
 	result, err := j.task.ExecNotifyJob(ctx, nil)
+	metrics.ObserveJobDuration("notify", time.Since(start).Seconds())
 	if err != nil {
+		metrics.ObserveJob("notify", "error")
 		slog.Error("定时任务，回调通知失败", "err", err)
 		return
 	}
-	if result["waitCount"] > 0 {
+	metrics.ObserveJob("notify", "success")
+	if n := result["waitCount"]; n > 0 {
+		metrics.ObserveJobProcessed("notify", "wait", n)
 		slog.Info("定时任务，回调通知完成", "result", result)
 	}
 }
@@ -103,10 +110,12 @@ func (j *TimeoutRefundJob) Start() {
 }
 
 func (j *TimeoutRefundJob) exec() {
+	start := time.Now()
 	ctx := context.Background()
 	lockKey := "group_buy_market_timeout_refund_job_exec"
 	ok, err := j.redis.TryLockWait(ctx, lockKey, 3*time.Second, 60*time.Second)
 	if err != nil || !ok {
+		metrics.ObserveJob("timeout_refund", "skip_lock")
 		slog.Info("超时退单定时任务，获取锁失败，跳过")
 		return
 	}
@@ -115,10 +124,14 @@ func (j *TimeoutRefundJob) exec() {
 	slog.Info("超时退单定时任务开始执行")
 	list, err := j.refund.QueryTimeoutUnpaidOrderList(ctx)
 	if err != nil {
+		metrics.ObserveJobDuration("timeout_refund", time.Since(start).Seconds())
+		metrics.ObserveJob("timeout_refund", "error")
 		slog.Error("TimeoutRefundJob 扫描失败", "err", err)
 		return
 	}
 	if len(list) == 0 {
+		metrics.ObserveJobDuration("timeout_refund", time.Since(start).Seconds())
+		metrics.ObserveJob("timeout_refund", "success")
 		slog.Info("超时退单定时任务，未发现超时未支付订单")
 		return
 	}
@@ -146,6 +159,10 @@ func (j *TimeoutRefundJob) exec() {
 			slog.Info("超时订单退单成功", "userId", item.UserID, "outTradeNo", item.OutTradeNo)
 		}
 	}
+	metrics.ObserveJobDuration("timeout_refund", time.Since(start).Seconds())
+	metrics.ObserveJob("timeout_refund", "success")
+	metrics.ObserveJobProcessed("timeout_refund", "success", success)
+	metrics.ObserveJobProcessed("timeout_refund", "fail", fail)
 	slog.Info("超时退单定时任务执行完成", "success", success, "fail", fail)
 }
 

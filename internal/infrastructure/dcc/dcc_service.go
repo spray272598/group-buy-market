@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"group-buy-market/internal/infrastructure/metrics"
 	"group-buy-market/internal/types/common"
 )
 
@@ -85,6 +86,7 @@ func (s *Service) EnableBroadcast(pub Publisher, sub Subscriber, channel, instan
 			// 本实例发出的消息也应用一次无妨（幂等）；日志区分
 			slog.Info("DCC 收到跨实例配置变更", "key", msg.Key, "value", msg.Value, "origin", msg.Origin)
 			s.applyLocal(msg.Key, msg.Value)
+			metrics.ObserveDCC(msg.Key, "broadcast")
 		})
 		if err != nil {
 			slog.Error("DCC 订阅失败", "err", err)
@@ -142,6 +144,7 @@ func (s *Service) IsCacheOpenSwitch() bool {
 // Update 本机更新并广播到其他实例
 func (s *Service) Update(key, value string) {
 	s.applyLocal(key, value)
+	metrics.ObserveDCC(key, "local")
 	s.broadcast(key, value)
 }
 

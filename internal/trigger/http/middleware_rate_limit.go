@@ -8,8 +8,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"golang.org/x/time/rate"
 
-	"group-buy-market/internal/types/enums"
 	"group-buy-market/internal/api/response"
+	"group-buy-market/internal/infrastructure/metrics"
+	"group-buy-market/internal/types/enums"
 )
 
 // RateLimiter 简易令牌桶限流（对齐 Java @RateLimiterAccessInterceptor 语义）
@@ -51,7 +52,9 @@ func (s *RateLimitStore) allow(userID string) bool {
 		s.users[userID] = u
 	}
 	u.lastSeen = time.Now()
-	return u.lim.Allow()
+	ok = u.lim.Allow()
+	metrics.ObserveRateLimit(ok)
+	return ok
 }
 
 // RateLimitByUserJSON 从 JSON body 提取 userId 做限流（用于 index 接口）

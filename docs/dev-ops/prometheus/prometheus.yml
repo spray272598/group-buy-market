@@ -2,12 +2,41 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+rule_files:
+  - /etc/prometheus/rules.yml
+
 scrape_configs:
+  # 应用：HTTP / 业务码 / 限流 / 库存 / Job / Notify / Redis客户端 / DB池
   - job_name: group-buy-market
     metrics_path: /metrics
+    scrape_interval: 10s
     static_configs:
-      # 本机 Go 进程（Docker Desktop / Linux host-gateway）
       - targets: ["host.docker.internal:8091"]
         labels:
           app: group-buy-market
           env: local
+          layer: app
+
+  # MySQL 中间件
+  - job_name: mysql
+    static_configs:
+      - targets: ["mysqld-exporter:9104"]
+        labels:
+          layer: middleware
+          component: mysql
+
+  # Redis 中间件
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          layer: middleware
+          component: redis
+
+  # RabbitMQ 内置 Prometheus 插件（:15692）
+  - job_name: rabbitmq
+    static_configs:
+      - targets: ["rabbitmq:15692"]
+        labels:
+          layer: middleware
+          component: rabbitmq

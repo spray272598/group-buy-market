@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"group-buy-market/internal/infrastructure/metrics"
 	"group-buy-market/internal/types/enums"
 )
 
@@ -25,17 +26,21 @@ func NewGroupBuyNotifyService(timeoutSec int) *GroupBuyNotifyService {
 }
 
 func (s *GroupBuyNotifyService) GroupBuyNotify(ctx context.Context, notifyURL, parameterJSON string) (string, error) {
+	start := time.Now()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, notifyURL, bytes.NewBufferString(parameterJSON))
 	if err != nil {
+		metrics.ObserveNotifyDuration("http", time.Since(start).Seconds())
 		return enums.NotifyTaskHTTPError, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := s.client.Do(req)
 	if err != nil {
+		metrics.ObserveNotifyDuration("http", time.Since(start).Seconds())
 		return enums.NotifyTaskHTTPError, err
 	}
 	defer resp.Body.Close()
 	_, _ = io.ReadAll(resp.Body)
+	metrics.ObserveNotifyDuration("http", time.Since(start).Seconds())
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 		return enums.NotifyTaskHTTPSuccess, nil
 	}

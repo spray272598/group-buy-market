@@ -18,6 +18,7 @@ import (
 	"group-buy-market/internal/domain/trade/model/valobj"
 	"group-buy-market/internal/infrastructure/dao/po"
 	"group-buy-market/internal/infrastructure/dcc"
+	"group-buy-market/internal/infrastructure/metrics"
 	redisx "group-buy-market/internal/infrastructure/redis"
 	"group-buy-market/internal/types/common"
 	"group-buy-market/internal/types/enums"
@@ -420,25 +421,32 @@ func (r *TradeRepository) UpdateNotifyTaskStatusRetry(ctx context.Context, task 
 func (r *TradeRepository) OccupyTeamStock(ctx context.Context, teamStockKey, recoveryTeamStockKey string, target, validTime int) (bool, error) {
 	recoveryCount, err := r.redis.GetInt64(ctx, recoveryTeamStockKey)
 	if err != nil {
+		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
 	occupy, err := r.redis.Incr(ctx, teamStockKey)
 	if err != nil {
+		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
 	occupy = occupy + 1 // 对齐 Java：已有占用量 +1
 	if occupy > int64(target)+recoveryCount {
+		metrics.ObserveStock("occupy", "fail")
 		return false, nil
 	}
 	lockKey := teamStockKey + common.Underline + fmt.Sprintf("%d", occupy)
 	ok, err := r.redis.SetNX(ctx, lockKey, time.Duration(validTime+60)*time.Minute)
 	if err != nil {
+		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
 	if !ok {
+		metrics.ObserveStock("occupy", "fail")
 		slog.Info("组队库存加锁失败", "lockKey", lockKey)
+		return false, nil
 	}
-	return ok, nil
+	metrics.ObserveStock("occupy", "success")
+	return true, nil
 }
 
 func (r *TradeRepository) RecoveryTeamStock(ctx context.Context, recoveryTeamStockKey string, validTime int) error {
@@ -446,7 +454,12 @@ func (r *TradeRepository) RecoveryTeamStock(ctx context.Context, recoveryTeamSto
 		return nil
 	}
 	_, err := r.redis.Incr(ctx, recoveryTeamStockKey)
-	return err
+	if err != nil {
+		metrics.ObserveStock("recovery", "error")
+		return err
+	}
+	metrics.ObserveStock("recovery", "success")
+	return nil
 }
 
 // Refund2AddRecovery 对齐 Java refund2AddRecovery：orderId 维度防重锁 + recovery 自增
@@ -458,16 +471,20 @@ func (r *TradeRepository) Refund2AddRecovery(ctx context.Context, recoveryTeamSt
 	// 30 天防重复恢复
 	ok, err := r.redis.SetNX(ctx, lockKey, 30*24*time.Hour)
 	if err != nil {
+		metrics.ObserveStock("refund_recovery", "error")
 		return err
 	}
 	if !ok {
+		metrics.ObserveStock("refund_recovery", "skip")
 		slog.Warn("订单恢复库存操作已在进行中，跳过", "orderId", orderID)
 		return nil
 	}
 	if _, err := r.redis.Incr(ctx, recoveryTeamStockKey); err != nil {
 		_ = r.redis.Del(ctx, lockKey) // 失败释放锁允许 MQ 重试
+		metrics.ObserveStock("refund_recovery", "error")
 		return err
 	}
+	metrics.ObserveStock("refund_recovery", "success")
 	slog.Info("订单恢复库存成功", "orderId", orderID, "key", recoveryTeamStockKey)
 	return nil
 }

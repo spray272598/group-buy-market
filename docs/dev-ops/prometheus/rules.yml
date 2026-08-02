@@ -1,0 +1,154 @@
+groups:
+  - name: group-buy-market-app
+    rules:
+      - alert: GBMTargetDown
+        expr: up{job="group-buy-market"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "group-buy-market metrics 不可达"
+          description: "Prometheus 无法抓取应用 /metrics 超过 1 分钟"
+
+      - alert: GBMDependencyDown
+        expr: gbm_dependency_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "依赖 {{ $labels.name }} 不可用"
+          description: "应用侧健康探针检测到 {{ $labels.name }} down"
+
+      - alert: GBMHTTPHighErrorRate
+        expr: |
+          sum(rate(gbm_http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(gbm_http_requests_total[5m])), 1e-9) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP 5xx 错误率 > 5%"
+
+      - alert: GBMHTTPHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(gbm_http_request_duration_seconds_bucket[5m])) by (le)) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "HTTP P95 延迟 > 1s"
+
+      - alert: GBMRateLimitHighDeny
+        expr: |
+          sum(rate(gbm_rate_limit_total{result="deny"}[5m]))
+          /
+          clamp_min(sum(rate(gbm_rate_limit_total[5m])), 1e-9) > 0.3
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "限流拒绝率 > 30%"
+
+      - alert: GBMBizLowSuccessRate
+        expr: |
+          sum(rate(gbm_biz_requests_total{code="0000"}[5m]))
+          /
+          clamp_min(sum(rate(gbm_biz_requests_total[5m])), 1e-9) < 0.8
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "业务成功率 < 80%"
+
+      - alert: GBMNotifyErrors
+        expr: sum(rate(gbm_notify_total{result="error"}[5m])) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "出站回调错误增多"
+
+      - alert: GBMStockOccupyFail
+        expr: sum(rate(gbm_stock_ops_total{op="occupy",result="fail"}[5m])) > 1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "组队库存占用失败频繁"
+          description: "可能库存紧张或并发抢锁冲突"
+
+      - alert: GBMRedisClientErrors
+        expr: sum(rate(gbm_redis_ops_total{result="error"}[5m])) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 客户端错误增多"
+
+      - alert: GBMMQPublishErrors
+        expr: sum(rate(gbm_mq_publish_total{result="error"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MQ 发布失败增多"
+
+      - alert: GBMMQConsumeErrors
+        expr: sum(rate(gbm_mq_consume_total{result="error"}[5m])) > 0.1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "MQ 消费失败增多（Nack 重试）"
+
+      - alert: GBMDBPoolSaturated
+        expr: |
+          gbm_db_in_use / clamp_min(gbm_db_max_open_connections, 1) > 0.9
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "DB 连接池使用率 > 90%"
+
+  - name: group-buy-market-middleware
+    rules:
+      - alert: GBMMySQLExporterDown
+        expr: up{job="mysql"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "mysqld-exporter 不可达"
+
+      - alert: GBMRedisExporterDown
+        expr: up{job="redis"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "redis-exporter 不可达"
+
+      - alert: GBMRabbitMQExporterDown
+        expr: up{job="rabbitmq"} == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "RabbitMQ prometheus 端点不可达"
+
+      - alert: GBMMySQLDown
+        expr: mysql_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "MySQL 实例不可用（exporterqld-exporter）"
+
+      - alert: GBMRedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis 实例不可用（redis-exporter）"

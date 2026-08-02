@@ -88,6 +88,7 @@ services:
     ports:
       - "5672:5672"
       - "15672:15672"
+      - "15692:15692" # rabbitmq_prometheus
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin
@@ -102,14 +103,48 @@ services:
     networks:
       - gbm-network
 
+  # MySQL / Redis / RabbitMQ 官方风格 exporter（中间件层指标）
+  mysqld-exporter:
+    image: prom/mysqld-exporter:v0.15.1
+    container_name: gbm-mysqld-exporter
+    restart: always
+    environment:
+      DATA_SOURCE_NAME: "root:123456@(mysql:3306)/"
+    ports:
+      - "9104:9104"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - gbm-network
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: gbm-redis-exporter
+    restart: always
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - "9121:9121"
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - gbm-network
+
   prometheus:
     image: prom/prometheus:v2.48.0
     container_name: gbm-prometheus
     restart: always
     ports:
       - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
       - gbm-prom-data:/prometheus
     extra_hosts:
       - "host.docker.internal:host-gateway"

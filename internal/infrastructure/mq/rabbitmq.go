@@ -7,6 +7,8 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
+
+	"group-buy-market/internal/infrastructure/metrics"
 )
 
 // Config RabbitMQ 配置（对齐 Java spring.rabbitmq）
@@ -85,12 +87,18 @@ func (c *Client) declare() error {
 
 // Publish 发布持久化消息到 topic exchange
 func (c *Client) Publish(ctx context.Context, routingKey, body string) error {
-	return c.ch.PublishWithContext(ctx, c.cfg.Exchange, routingKey, false, false, amqp.Publishing{
+	err := c.ch.PublishWithContext(ctx, c.cfg.Exchange, routingKey, false, false, amqp.Publishing{
 		ContentType:  "application/json",
 		Body:         []byte(body),
 		DeliveryMode: amqp.Persistent,
 		Timestamp:    time.Now(),
 	})
+	if err != nil {
+		metrics.ObserveMQPublish(routingKey, "error")
+		return err
+	}
+	metrics.ObserveMQPublish(routingKey, "success")
+	return nil
 }
 
 // Consume 启动消费循环（阻塞于 goroutine 中调用）
@@ -101,11 +109,14 @@ func (c *Client) Consume(queue string, handler func(body []byte) error) error {
 	}
 	go func() {
 		for d := range deliveries {
+			start := time.Now()
 			if err := handler(d.Body); err != nil {
+				metrics.ObserveMQConsume(queue, "error", time.Since(start).Seconds())
 				slog.Error("MQ消费失败，消息Nack重试", "queue", queue, "err", err)
 				_ = d.Nack(false, true)
 				continue
 			}
+			metrics.ObserveMQConsume(queue, "success", time.Since(start).Seconds())
 			_ = d.Ack(false)
 		}
 	}()
@@ -140,6 +151,7 @@ func NewEventPublisher(client *Client) *EventPublisher {
 func (p *EventPublisher) Publish(ctx context.Context, routingKey, message string) error {
 	if p == nil || p.client == nil {
 		slog.Warn("MQ未就绪，消息仅落日志", "routingKey", routingKey, "message", message)
+		metrics.ObserveMQPublish(routingKey, "skip")
 		return nil
 	}
 	if err := p.client.Publish(ctx, routingKey, message); err != nil {
