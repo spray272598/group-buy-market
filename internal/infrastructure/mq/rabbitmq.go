@@ -110,7 +110,17 @@ func (c *Client) Consume(queue string, handler func(body []byte) error) error {
 	go func() {
 		for d := range deliveries {
 			start := time.Now()
-			if err := handler(d.Body); err != nil {
+			// 捕获 handler panic 并转为 error，Nack 重试而非崩溃进程
+			err := func() (err error) {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("MQ消费处理器 panic", "queue", queue, "panic", r)
+						err = fmt.Errorf("handler panic: %v", r)
+					}
+				}()
+				return handler(d.Body)
+			}()
+			if err != nil {
 				metrics.ObserveMQConsume(queue, "error", time.Since(start).Seconds())
 				slog.Error("MQ消费失败，消息Nack重试", "queue", queue, "err", err)
 				_ = d.Nack(false, true)

@@ -149,7 +149,7 @@ func NewApplication(cfg *Config) (*Application, error) {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	engine := gin.New()
-	engine.Use(gin.Recovery(), gin.Logger(), triggerhttp.MetricsMiddleware())
+	engine.Use(gin.Recovery(), gin.Logger(), triggerhttp.TraceMiddleware(), triggerhttp.MetricsMiddleware())
 	engine.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	rlStore := triggerhttp.NewRateLimitStore(cfg.RateLimit.IndexQPS, cfg.RateLimit.Burst)

@@ -3,8 +3,10 @@ package node
 import (
 	"context"
 	"log/slog"
-	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/shopspring/decimal"
 
@@ -25,6 +27,8 @@ type Chain struct {
 	repo     repository.IActivityRepository
 	discount *discount.Registry
 	timeout  time.Duration
+	// sem 控制并发度，防止 goroutine 泄露（对齐 Java ThreadPoolConfig）
+	sem *semaphore.Weighted
 }
 
 func NewChain(repo repository.IActivityRepository, discountReg *discount.Registry) *Chain {
@@ -32,6 +36,8 @@ func NewChain(repo repository.IActivityRepository, discountReg *discount.Registr
 		repo:     repo,
 		discount: discountReg,
 		timeout:  5 * time.Second,
+		// 并发度上限 = 4，防止高并发下 goroutine 飙升
+		sem: semaphore.NewWeighted(4),
 	}
 }
 
@@ -102,33 +108,45 @@ func (c *Chain) marketNode(ctx context.Context, req *entity.MarketProductEntity,
 	return c.tagNode(ctx, req, dc)
 }
 
+// multiThreadLoad 使用 errgroup 并行加载活动配置与 SKU 数据，
+// 并通过信号量控制并发度，防止高流量下 goroutine 飙升。
+// 对应 Java 端 CompletableFuture + ThreadPoolExecutor 语义。
 func (c *Chain) multiThreadLoad(ctx context.Context, req *entity.MarketProductEntity, dc *factory.DynamicContext) error {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
+	g, gCtx := errgroup.WithContext(ctx)
+
+	// 信号量控制：最多允许 4 个试算请求并行（防止 goroutine 泄露）
+	if err := c.sem.Acquire(gCtx, 1); err != nil {
+		return err
+	}
+	defer c.sem.Release(1)
+
 	var (
-		wg   sync.WaitGroup
-		act  *valobj.GroupBuyActivityDiscountVO
+		act *valobj.GroupBuyActivityDiscountVO
 		sku  *valobj.SkuVO
-		err1 error
-		err2 error
 	)
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		act, err1 = c.loadActivity(ctx, req)
-	}()
-	go func() {
-		defer wg.Done()
-		sku, err2 = c.repo.QuerySkuByGoodsID(ctx, req.GoodsID)
-	}()
-	wg.Wait()
-	if err1 != nil {
-		return err1
+
+	// 并行加载拼团活动折扣信息
+	g.Go(func() error {
+		var err error
+		act, err = c.loadActivity(gCtx, req)
+		return err
+	})
+
+	// 并行加载 SKU 商品信息
+	g.Go(func() error {
+		var err error
+		sku, err = c.repo.QuerySkuByGoodsID(gCtx, req.GoodsID)
+		return err
+	})
+
+	// 任一失败立即取消另一个（errgroup.WithContext 取消传播）
+	if err := g.Wait(); err != nil {
+		return err
 	}
-	if err2 != nil {
-		return err2
-	}
+
 	dc.GroupBuyActivityDiscountVO = act
 	dc.SkuVO = sku
 	return nil

@@ -8,6 +8,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 
 	"group-buy-market/internal/infrastructure/metrics"
+	"group-buy-market/internal/types/safego"
 )
 
 // Service Redis 封装（库存占用、人群 BitSet、缓存）
@@ -42,6 +43,13 @@ func (s *Service) Incr(ctx context.Context, key string) (int64, error) {
 	start := time.Now()
 	n, err := s.client.Incr(ctx, key).Result()
 	observe("incr", start, err)
+	return n, err
+}
+
+func (s *Service) Decr(ctx context.Context, key string) (int64, error) {
+	start := time.Now()
+	n, err := s.client.Decr(ctx, key).Result()
+	observe("decr", start, err)
 	return n, err
 }
 
@@ -175,7 +183,10 @@ func (s *Service) Subscribe(ctx context.Context, channel string, handler func(pa
 					return
 				}
 				if msg != nil {
-					handler(msg.Payload)
+					func() {
+						defer safego.Recover("redis_subscribe_handler")
+						handler(msg.Payload)
+					}()
 				}
 			}
 		}

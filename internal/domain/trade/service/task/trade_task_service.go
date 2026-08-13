@@ -7,6 +7,7 @@ import (
 	"group-buy-market/internal/domain/trade/adapter/port"
 	"group-buy-market/internal/domain/trade/adapter/repository"
 	"group-buy-market/internal/domain/trade/model/entity"
+	"group-buy-market/internal/domain/trade/model/valobj"
 	"group-buy-market/internal/types/enums"
 )
 
@@ -45,6 +46,10 @@ func (s *TradeTaskService) ExecNotifyJobByTeamID(ctx context.Context, teamID str
 func (s *TradeTaskService) execList(ctx context.Context, tasks []*entity.NotifyTaskEntity) (map[string]int, error) {
 	success, errCnt, retry := 0, 0, 0
 	for _, t := range tasks {
+		// 终态任务直接跳过（已成功/失败），避免重复投递
+		if t.Status.IsTerminal() {
+			continue
+		}
 		resp, e := s.port.GroupBuyNotify(ctx, t)
 		if e != nil {
 			slog.Error("回调通知异常", "teamId", t.TeamID, "err", e)
@@ -52,25 +57,33 @@ func (s *TradeTaskService) execList(ctx context.Context, tasks []*entity.NotifyT
 		}
 		switch resp {
 		case enums.NotifyTaskHTTPSuccess:
-			if n, _ := s.repo.UpdateNotifyTaskStatusSuccess(ctx, t); n == 1 {
-				success++
+			if _, err := t.Status.MoveTo(valobj.NotifyTaskSuccess); err == nil {
+				if n, _ := s.repo.UpdateNotifyTaskStatusSuccess(ctx, t); n == 1 {
+					success++
+				}
 			}
 		case enums.NotifyTaskHTTPError:
 			// 超过 4 次标记失败，否则重试（对齐 Java）
 			if t.NotifyCount > 4 {
-				if n, _ := s.repo.UpdateNotifyTaskStatusError(ctx, t); n == 1 {
-					errCnt++
+				if _, err := t.Status.MoveTo(valobj.NotifyTaskError); err == nil {
+					if n, _ := s.repo.UpdateNotifyTaskStatusError(ctx, t); n == 1 {
+						errCnt++
+					}
 				}
 			} else {
-				if n, _ := s.repo.UpdateNotifyTaskStatusRetry(ctx, t); n == 1 {
-					retry++
+				if _, err := t.Status.MoveTo(valobj.NotifyTaskRetry); err == nil {
+					if n, _ := s.repo.UpdateNotifyTaskStatusRetry(ctx, t); n == 1 {
+						retry++
+					}
 				}
 			}
 		case enums.NotifyTaskHTTPNull:
 			// 未抢到锁，不改状态
 		default:
-			if n, _ := s.repo.UpdateNotifyTaskStatusRetry(ctx, t); n == 1 {
-				retry++
+			if _, err := t.Status.MoveTo(valobj.NotifyTaskRetry); err == nil {
+				if n, _ := s.repo.UpdateNotifyTaskStatusRetry(ctx, t); n == 1 {
+					retry++
+				}
 			}
 		}
 	}

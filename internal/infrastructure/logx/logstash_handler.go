@@ -8,6 +8,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"group-buy-market/internal/infrastructure/trace"
 )
 
 // LogstashHandler 将 slog 以 JSON Lines 发到 Logstash TCP:4560（ELK）
@@ -40,6 +42,10 @@ func (h *LogstashHandler) Handle(ctx context.Context, r slog.Record) error {
 		"level":   r.Level.String(),
 		"msg":     r.Message,
 		"service": "group-buy-market",
+	}
+	// 链路追踪：自动注入 trace_id（ELK 可按此字段全链路检索）
+	if tid := trace.FromContext(ctx); tid != "" {
+		attrs["trace_id"] = tid
 	}
 	r.Attrs(func(a slog.Attr) bool {
 		attrs[a.Key] = a.Value.Any()

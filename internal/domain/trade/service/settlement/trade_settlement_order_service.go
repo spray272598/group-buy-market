@@ -10,6 +10,7 @@ import (
 	"group-buy-market/internal/domain/trade/model/entity"
 	"group-buy-market/internal/domain/trade/service/settlement/filter"
 	"group-buy-market/internal/domain/trade/service/task"
+	"group-buy-market/internal/types/safego"
 )
 
 // ITradeSettlementOrderService 结算服务
@@ -70,14 +71,16 @@ func (s *TradeSettlementOrderService) SettlementMarketPayOrder(ctx context.Conte
 
 	// 异步回调（失败由定时任务补偿）
 	if notifyTask != nil && s.task != nil {
-		go func() {
-			result, e := s.task.ExecNotifyJob(context.Background(), notifyTask)
+		// 保留 traceId 避免异步回调断链；safego 捕获 panic 防止进程崩溃
+		asyncCtx := context.WithoutCancel(ctx)
+		safego.Go("结算回调", func() {
+			result, e := s.task.ExecNotifyJob(asyncCtx, notifyTask)
 			if e != nil {
 				slog.Error("回调通知拼团完结失败", "err", e, "result", result)
 			} else {
 				slog.Info("回调通知拼团完结", "result", result)
 			}
-		}()
+		})
 	}
 
 	return &entity.TradePaySettlementEntity{

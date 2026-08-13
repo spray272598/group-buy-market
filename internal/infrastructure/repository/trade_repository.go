@@ -429,18 +429,29 @@ func (r *TradeRepository) OccupyTeamStock(ctx context.Context, teamStockKey, rec
 		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
+	// rollback 撤销本次 Incr：超卖/加锁失败时若不回滚，会产生「幽灵占位」，
+	// 导致实际可售库存越卖越少（TOCTOU 竞态）
+	rollback := func() {
+		if _, e := r.redis.Decr(ctx, teamStockKey); e != nil {
+			metrics.ObserveStock("occupy", "error")
+			slog.Error("库存占用回滚失败", "key", teamStockKey, "err", e)
+		}
+	}
 	occupy = occupy + 1 // 对齐 Java：已有占用量 +1
 	if occupy > int64(target)+recoveryCount {
+		rollback()
 		metrics.ObserveStock("occupy", "fail")
 		return false, nil
 	}
 	lockKey := teamStockKey + common.Underline + fmt.Sprintf("%d", occupy)
 	ok, err := r.redis.SetNX(ctx, lockKey, time.Duration(validTime+60)*time.Minute)
 	if err != nil {
+		rollback()
 		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
 	if !ok {
+		rollback()
 		metrics.ObserveStock("occupy", "fail")
 		slog.Info("组队库存加锁失败", "lockKey", lockKey)
 		return false, nil
@@ -691,6 +702,7 @@ func toNotifyEntity(t *po.NotifyTask) *entity.NotifyTaskEntity {
 		NotifyMQ:      mq,
 		NotifyUrl:     url,
 		NotifyCount:   t.NotifyCount,
+		Status:        valobj.NotifyTaskStatus(t.NotifyStatus),
 		ParameterJSON: t.ParameterJSON,
 		UUID:          t.UUID,
 		ActivityID:    t.ActivityID,

@@ -84,6 +84,7 @@ type NotifyTaskEntity struct {
 	NotifyMQ      string
 	NotifyUrl     string
 	NotifyCount   int
+	Status        valobj.NotifyTaskStatus
 	ParameterJSON string
 	UUID          string
 	ActivityID    int64

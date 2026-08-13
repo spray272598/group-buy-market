@@ -10,6 +10,7 @@ import (
 	"group-buy-market/internal/domain/trade/service/task"
 	"group-buy-market/internal/infrastructure/metrics"
 	redisx "group-buy-market/internal/infrastructure/redis"
+	"group-buy-market/internal/types/safego"
 )
 
 // NotifyJob 回调补偿定时任务（多实例 Redis 分布式锁）
@@ -48,6 +49,7 @@ func (j *NotifyJob) Start() {
 }
 
 func (j *NotifyJob) exec() {
+	defer safego.Recover("notify_job")
 	start := time.Now()
 	ctx := context.Background()
 	lockKey := "group_buy_market_notify_job_exec"
@@ -110,6 +112,7 @@ func (j *TimeoutRefundJob) Start() {
 }
 
 func (j *TimeoutRefundJob) exec() {
+	defer safego.Recover("timeout_refund_job")
 	start := time.Now()
 	ctx := context.Background()
 	lockKey := "group_buy_market_timeout_refund_job_exec"

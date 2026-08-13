@@ -11,10 +11,10 @@ Java「小傅哥拼团」完整 Go 重写：**严格 DDD** + 责任链/策略树
 | 维度 | 体现 |
 |------|------|
 | DDD | 限界上下文 activity / trade / tag；聚合事务；仓储端口倒置 |
-| 设计模式 | 试算策略树、锁单/结算/退单责任链、折扣/退单策略 |
+| 设计模式 | 试算策略树、锁单/结算/退单责任链、折扣/退单策略、回调任务状态机 |
 | 高并发 | Redis 组队库存 occupy + recovery；回调/Job 分布式锁 |
-| 最终一致 | 本地消息表 `notify_task` + 定时补偿 + MQ 重试 |
-| 可运维 | 限流 + Prometheus/Grafana 全链路看板 + 告警、DCC 热更新 |
+| 最终一致 | 本地消息表 `notify_task` + 定时补偿 + MQ 重试；状态机约束状态流转 |
+| 可运维 | 限流 + TraceId 链路追踪 + ELK 检索 + Prometheus/Grafana 全链路看板 + 告警、DCC 热更新 |
 | 完整链路 | 试算→锁单→结算成团→回调→退单逆向→超时退单 |
 
 ---
@@ -142,7 +142,7 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 | 降级/切量/黑名单 | DCC + **Redis Pub/Sub 跨实例广播** |
 | 锁单 | 责任链 + Redis 库存 + MySQL 事务写团/明细 |
 | 结算成团 | 责任链 + complete_count + 达标写 notify_task |
-| 回调 | TradePort：Redis 抢锁 → HTTP 或 MQ 持久化消息 |
+| 回调 | TradePort：Redis 抢锁 → HTTP 或 MQ 持久化消息；状态机约束 初始/成功/重试/失败 流转 |
 | 退单 | 三策略 + MQ 通知 + Consumer 恢复 recovery 库存 |
 | 超时未支付 | Job + 分布式锁 + 走退单链路 |
 | 人群 | Tag 批次任务；Redis BitSet + crowd_tags_detail |
@@ -184,7 +184,7 @@ curl -X POST http://127.0.0.1:8091/api/v1/gbm/trade/settlement_market_pay_order 
 go test ./internal/... -count=1
 ```
 
-覆盖：折扣策略、试算责任链、锁单/结算规则链、退单类型、DCC 广播、限流等。
+覆盖：折扣策略、试算责任链、锁单/结算规则链、退单类型、回调任务状态机（迁移规则 + 非法流转拦截）、DCC 广播、限流等。
 
 ## License
 

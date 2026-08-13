@@ -10,6 +10,7 @@ import (
 
 	"group-buy-market/internal/infrastructure/metrics"
 	"group-buy-market/internal/types/common"
+	"group-buy-market/internal/types/safego"
 )
 
 // AttributeVO 配置变更消息（对齐 Java AttributeVO，用于 Redis 广播）
@@ -67,7 +68,7 @@ func (s *Service) EnableBroadcast(pub Publisher, sub Subscriber, channel, instan
 	if sub == nil {
 		return
 	}
-	go func() {
+	safego.Go("dcc_subscribe", func() {
 		ctx := context.Background()
 		err := sub.Subscribe(ctx, s.channel, func(payload string) {
 			var msg struct {
@@ -91,7 +92,7 @@ func (s *Service) EnableBroadcast(pub Publisher, sub Subscriber, channel, instan
 		if err != nil {
 			slog.Error("DCC 订阅失败", "err", err)
 		}
-	}()
+	})
 }
 
 func (s *Service) IsDowngradeSwitch() bool {

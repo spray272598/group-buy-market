@@ -4,7 +4,7 @@ module group-buy-market
 // - 语法层面：1.21+ 足够（泛型、slog 等）
 // - 依赖层面：见下方库版本，避免 gin 过新把 go 抬到 1.25
 // - 本机可用 1.22 / 1.23 / 1.25 等更高版本编译，不必为项目频繁升级大版本
-go 1.22
+go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
@@ -52,6 +52,7 @@ require (
 	golang.org/x/arch v0.8.0 // indirect
 	golang.org/x/crypto v0.23.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
+	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.20.0 // indirect
 	golang.org/x/text v0.15.0 // indirect
 	google.golang.org/protobuf v1.34.1 // indirect

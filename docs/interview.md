@@ -44,6 +44,9 @@ A: `tryLock(wait, lease)` 抢 `group_buy_market_*_job_exec`。
 **Q: DDD 依赖方向？**  
 A: domain 不依赖 gorm/gin；infrastructure 实现端口；app 组装。
 
+**Q: 回调任务的状态怎么管理的？为什么用状态机？**  
+A: `notify_task` 状态原来是魔法数字 0/1/2/3 + 手写 switch。我在领域值对象上落地了轻量状态机：迁移表定义「初始→成功/重试/失败，重试→成功/失败」，`MoveTo` 拦截非法流转（如成功→重试），`IsTerminal` 跳过终态任务避免重复投递。「重试 ≤4 次」作为迁移守卫保留在服务层。没引 `looplab/fsm`，因为状态少、手写更贴合 DDD 充血模型、少一个依赖。
+
 ## 5. 可展示的扩展
 
 - **限流**：`userId` 维度令牌桶（`golang.org/x/time/rate`），超限业务码 `0006`

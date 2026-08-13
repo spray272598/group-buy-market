@@ -11,6 +11,7 @@ import (
 	"group-buy-market/internal/domain/trade/model/valobj"
 	"group-buy-market/internal/domain/trade/service/lock/factory"
 	"group-buy-market/internal/domain/trade/service/task"
+	"group-buy-market/internal/types/safego"
 )
 
 // IRefundOrderStrategy 退单策略
@@ -30,14 +31,16 @@ func (b *baseStrategy) sendRefundNotify(ctx context.Context, notify *entity.Noti
 	if notify == nil || b.Task == nil {
 		return
 	}
-	go func() {
-		result, err := b.Task.ExecNotifyJob(context.Background(), notify)
+	// 保留 traceId 避免异步回调断链；safego 捕获 panic 防止进程崩溃
+	asyncCtx := context.WithoutCancel(ctx)
+	safego.Go("退单回调", func() {
+		result, err := b.Task.ExecNotifyJob(asyncCtx, notify)
 		if err != nil {
 			slog.Error("退单回调失败", "scene", scene, "err", err, "result", result)
 		} else {
 			slog.Info("退单回调完成", "scene", scene, "result", result)
 		}
-	}()
+	})
 }
 
 func (b *baseStrategy) doReverseStock(ctx context.Context, msg *valobj.TeamRefundSuccess, scene string) error {
