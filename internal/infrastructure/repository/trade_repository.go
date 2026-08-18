@@ -418,42 +418,43 @@ func (r *TradeRepository) UpdateNotifyTaskStatusRetry(ctx context.Context, task 
 	return int(res.RowsAffected), res.Error
 }
 
+// occupyTeamStockScript 原子占坑脚本：
+//   - KEYS[1] teamStockKey 当前已占坑总数（历史只增不减）
+//   - KEYS[2] recoveryTeamStockKey 取消/退款后补偿的可占坑数
+//   - ARGV[1] target 成团人数
+//   - ARGV[2] lockTTL slot 锁过期秒数
+//
+// 判断额度 -> INCR -> 超限回滚 / 抢占 slot 锁，全程单次 Lua 原子执行，
+// 避免「先 Incr 再业务回滚」的 TOCTOU 竞态窗口。
+const occupyTeamStockScript = `
+local occupy = redis.call('INCR', KEYS[1])
+local recovery = redis.call('GET', KEYS[2])
+if not recovery then recovery = 0 end
+if occupy > tonumber(ARGV[1]) + tonumber(recovery) then
+    redis.call('DECR', KEYS[1])
+    return 0
+end
+local lockKey = KEYS[1] .. '_' .. occupy
+local ok = redis.call('SET', lockKey, 1, 'NX', 'EX', ARGV[2])
+if not ok then
+    redis.call('DECR', KEYS[1])
+    return 0
+end
+return 1
+`
+
 func (r *TradeRepository) OccupyTeamStock(ctx context.Context, teamStockKey, recoveryTeamStockKey string, target, validTime int) (bool, error) {
-	recoveryCount, err := r.redis.GetInt64(ctx, recoveryTeamStockKey)
+	// INCR 返回的是增加后的新值，直接作为占坑序号，无需再 +1（曾存在 off-by-one）
+	res, err := r.redis.Eval(ctx, occupyTeamStockScript,
+		[]string{teamStockKey, recoveryTeamStockKey},
+		target, int64(validTime+60)*60)
 	if err != nil {
 		metrics.ObserveStock("occupy", "error")
 		return false, err
 	}
-	occupy, err := r.redis.Incr(ctx, teamStockKey)
-	if err != nil {
-		metrics.ObserveStock("occupy", "error")
-		return false, err
-	}
-	// rollback 撤销本次 Incr：超卖/加锁失败时若不回滚，会产生「幽灵占位」，
-	// 导致实际可售库存越卖越少（TOCTOU 竞态）
-	rollback := func() {
-		if _, e := r.redis.Decr(ctx, teamStockKey); e != nil {
-			metrics.ObserveStock("occupy", "error")
-			slog.Error("库存占用回滚失败", "key", teamStockKey, "err", e)
-		}
-	}
-	occupy = occupy + 1 // 对齐 Java：已有占用量 +1
-	if occupy > int64(target)+recoveryCount {
-		rollback()
+	ok, _ := res.(int64)
+	if ok != 1 {
 		metrics.ObserveStock("occupy", "fail")
-		return false, nil
-	}
-	lockKey := teamStockKey + common.Underline + fmt.Sprintf("%d", occupy)
-	ok, err := r.redis.SetNX(ctx, lockKey, time.Duration(validTime+60)*time.Minute)
-	if err != nil {
-		rollback()
-		metrics.ObserveStock("occupy", "error")
-		return false, err
-	}
-	if !ok {
-		rollback()
-		metrics.ObserveStock("occupy", "fail")
-		slog.Info("组队库存加锁失败", "lockKey", lockKey)
 		return false, nil
 	}
 	metrics.ObserveStock("occupy", "success")

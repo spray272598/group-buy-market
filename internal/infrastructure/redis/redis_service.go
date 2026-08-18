@@ -71,6 +71,14 @@ func (s *Service) SetNX(ctx context.Context, key string, expiration time.Duratio
 	return ok, err
 }
 
+// Eval 执行 Lua 脚本（原子操作），返回脚本返回值；Lua number 对应 int64
+func (s *Service) Eval(ctx context.Context, script string, keys []string, args ...any) (any, error) {
+	start := time.Now()
+	res, err := s.client.Eval(ctx, script, keys, args...).Result()
+	observe("eval", start, err)
+	return res, err
+}
+
 func (s *Service) Del(ctx context.Context, keys ...string) error {
 	start := time.Now()
 	err := s.client.Del(ctx, keys...).Err()
